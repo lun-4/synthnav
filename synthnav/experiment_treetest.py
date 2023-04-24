@@ -36,8 +36,11 @@ class GenerationWidget(tk.Frame):
         self.parent_generation = parent_generation
         self.state = GenerationWidgetState.GENERATED
 
+        self.text = text
+
         self.text_variable = tk.StringVar()
-        self.text_variable.set(text)
+        self.text_variable.set(self.text)
+        self.generation_children = []
 
         self.create_widgets()
         self.configure()
@@ -59,7 +62,9 @@ class GenerationWidget(tk.Frame):
         )
         self.edit_tip = Hovertip(self.edit_button, "Edit generation")
 
-        self.add_button = tk.Button(self.buttons, text="\N{HEAVY PLUS SIGN}")
+        self.add_button = tk.Button(
+            self.buttons, text="\N{HEAVY PLUS SIGN}", command=self.on_wanted_add
+        )
         self.add_tip = Hovertip(self.add_button, "Create generation from this")
 
         self.text_widget.grid(row=0, column=0)
@@ -67,9 +72,23 @@ class GenerationWidget(tk.Frame):
         self.edit_button.grid(row=0, column=1, sticky="w")
         self.add_button.grid(row=1, column=1, sticky="w")
 
+    def add_child(self, text):
+        new_child = GenerationWidget(
+            self.parent_widget, self.tree, text, parent_generation=self
+        )
+        self.generation_children.append(new_child)
+        return new_child
+
+    def on_wanted_add(self):
+        child = self.add_child(lorem.paragraph())
+        self.tree.on_new_child(self)
+
     def configure(self):
         self.on_any_zoom(self.tree.scroll_ratio)
         self.on_state_change()
+        for child in self.generation_children:
+            child.on_any_zoom(self.tree.scroll_ratio)
+            child.on_state_change()
 
     def on_state_change(self):
         match self.state:
@@ -94,11 +113,19 @@ class GenerationWidget(tk.Frame):
         self.state = GenerationWidgetState.EDITING
 
     def on_any_zoom(self, new_scroll_ratio):
-        if new_scroll_ratio < 1.0:
+        # TODO hide text on far enough zoom
+        new_font_size = 10
+        if new_scroll_ratio < 0.4:
+            self.text_variable.set("")
+        elif new_scroll_ratio < 1.0:
             new_font_size = math.floor(10 * new_scroll_ratio)
+            self.text_variable.set(self.text)
         else:
-            new_font_size = 10
+            self.text_variable.set(self.text)
         self.text_widget.config(font=("Arial", new_font_size))
+
+        for child in self.generation_children:
+            child.on_any_zoom(new_scroll_ratio)
 
 
 class GenerationTree(tk.Frame):
@@ -122,25 +149,49 @@ class GenerationTree(tk.Frame):
         self.horizontal_bar["command"] = self.canvas.xview
         self.vertical_bar["command"] = self.canvas.yview
 
-        # TODO xy scroll bar (shift + scroll for x, scroll for y, ctrl+scroll for zoom)
-        # TODO create generation widgets at runtime
+        # test data goes here
+        root_generation = GenerationWidget(self.canvas, self, lorem.paragraph())
+        for idx in range(5):
+            child_generation = root_generation.add_child(lorem.paragraph())
+            if idx == 2:
+                for _ in range(3):
+                    child_generation.add_child(lorem.paragraph())
 
-        gen1 = GenerationWidget(self.canvas, self, lorem.paragraph())
-        oid = self.canvas.create_window(50, 50, anchor="nw", window=gen1)
-        coords1 = self.canvas.coords(oid)
+        self.generations = [root_generation]
+        self.draw(root_generation)
 
-        self.generations = [gen1]
+    def draw(self, root_generation, x=50, y=50):
+        root_object_id = self.canvas.create_window(
+            x, y, anchor="nw", window=root_generation
+        )
+        root_generation.canvas_object_id = root_object_id
+        root_generation_coords = self.canvas.coords(root_object_id)
 
-        for i in range(5):
-            gen_other = GenerationWidget(
-                self.canvas, self, lorem.paragraph(), parent_generation=gen1
+        for index, child_generation in enumerate(root_generation.generation_children):
+            child_object_id = self.draw(
+                child_generation, x=x + 400, y=y + (150 * index)
             )
-            oid_other = self.canvas.create_window(
-                450, 100 + (150 * i), anchor="nw", window=gen_other
+            child_coords = self.canvas.coords(child_object_id)
+            self.canvas.create_line(
+                root_generation_coords[0] + 150,
+                root_generation_coords[1],
+                *child_coords,
+                fill="green",
+                width=3
             )
-            coords_other = self.canvas.coords(oid_other)
-            self.canvas.create_line(*coords1, *coords_other, fill="green", width=3)
-            self.generations.append(gen_other)
+
+        return root_object_id
+
+    def on_new_child(self, generation):
+        """redraw entire generation. generation must be the parent of the
+        new child being created. see GenerationWidget.on_wanted_add()"""
+
+        # TODO adding new children should only involve drawing the line
+        # and the new widget. this method causes memory leaks as we're just
+        # drawing on top of the old widgets
+
+        coords = self.canvas.coords(generation.canvas_object_id)
+        self.draw(generation, x=coords[0], y=coords[1])
 
     def configure_ui(self):
         # zoom code refactored from loom
