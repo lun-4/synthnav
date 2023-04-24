@@ -4,7 +4,9 @@ import logging
 import asyncio
 import lorem
 import tkinter as tk
+from typing import List
 from tkinter import ttk
+from uuid import UUID, uuid4 as new_uuid
 from idlelib.tooltip import Hovertip
 
 log = logging.getLogger(__name__)
@@ -19,39 +21,52 @@ class UIMockup:
             log.info("main window was cancelled, assuming shutdown")
 
 
-class GenerationWidgetState(enum.IntEnum):
+class GenerationState(enum.IntEnum):
     PENDING = 0
     GENERATED = 1
     EDITING = 2
 
 
-class GenerationWidget(tk.Frame):
+# Generation Model class
+class Generation:
+    def __init__(
+        self,
+        *,
+        id: UUID,
+        state: GenerationState,
+        text: str,
+        parent: UUID,
+        children: List[UUID] = None,
+    ):
+        self.id = id
+        self.state = state
+        self.text = text
+        self.parent = parent
+        self.children = children or []
+
+
+class SingleGenerationView(tk.Frame):
     """Represents a single generation."""
 
-    def __init__(self, parent, tree, text, parent_generation=None):
-        super().__init__(parent)
+    def __init__(self, parent_widget, tree_view, generation: Generation):
+        super().__init__(parent_widget)
+        self.parent_line_canvas_id = None
+        self.canvas_object_id = None
 
-        self.parent_widget = parent
-        self.tree = tree
-        self.parent_generation = parent_generation
-        self.state = GenerationWidgetState.GENERATED
-
-        self.text = text
+        self.tree_view = tree_view
+        self.parent_widget = parent_widget
+        self.generation = generation
 
         self.text_variable = tk.StringVar()
-        self.text_variable.set(self.text)
-        self.generation_children = []
-
-        self.create_widgets()
-        self.configure()
+        self.text_variable.set(self.generation.text)
 
     def create_widgets(self):
-        match self.state:
-            case GenerationWidgetState.GENERATED:
+        match self.generation.state:
+            case GenerationState.GENERATED:
                 self.text_widget = tk.Label(
                     self, textvariable=self.text_variable, wraplength=300
                 )
-            case GenerationWidgetState.EDITING:
+            case GenerationState.EDITING:
                 self.text_widget = tk.Entry(
                     self, textvariable=self.text_variable, wraplength=300
                 )
@@ -73,33 +88,27 @@ class GenerationWidget(tk.Frame):
         self.add_button.grid(row=1, column=1, sticky="w")
 
     def add_child(self, text):
-        new_child = GenerationWidget(
-            self.parent_widget, self.tree, text, parent_generation=self
-        )
-        self.generation_children.append(new_child)
-        return new_child
+        return self.tree_view.controller.add_child(self.generation.id, text)
 
     def on_wanted_add(self):
         child = self.add_child(lorem.paragraph())
-        self.tree.on_new_child(self)
+        self.tree_view.on_new_child(self)
 
-    def configure(self):
-        self.on_any_zoom(self.tree.scroll_ratio)
+    def configure_ui(self):
+        self.on_any_zoom(self.tree_view.scroll_ratio)
         self.on_state_change()
-        for child in self.generation_children:
-            child.on_any_zoom(self.tree.scroll_ratio)
-            child.on_state_change()
+        self._for_all_children(lambda child: child.configure_ui())
 
     def on_state_change(self):
-        match self.state:
-            case GenerationWidgetState.GENERATED:
+        match self.generation.state:
+            case GenerationState.GENERATED:
                 self.text_widget.config(bg="gray51", fg="white")
-            case GenerationWidgetState.EDITING:
+            case GenerationState.EDITING:
                 self.text_widget.config(bg="red", fg="white")
 
     def on_wanted_edit(self):
-        match self.state:
-            case GenerationWidgetState.GENERATED:
+        match self.generation.state:
+            case GenerationState.GENERATED:
                 self.entry_widget = tk.Text(self.text_widget, width=300, height=20)
                 self.entry_widget.insert(tk.INSERT, self.text_variable.get())
                 self.entry_widget.place(
@@ -108,9 +117,13 @@ class GenerationWidget(tk.Frame):
                 self.entry_widget.focus_set()
                 self.text_widget = self.entry_widget
 
-            case GenerationWidgetState.EDITING:
+            case GenerationState.EDITING:
                 pass
-        self.state = GenerationWidgetState.EDITING
+        self.generation.state = GenerationState.EDITING
+
+    def _for_all_children(self, callback):
+        for child_id in self.generation.children:
+            callback(self.tree_view.single_generation_views[child_id])
 
     def on_any_zoom(self, new_scroll_ratio):
         # TODO hide text on far enough zoom
@@ -119,28 +132,27 @@ class GenerationWidget(tk.Frame):
             self.text_variable.set("")
         elif new_scroll_ratio < 1.0:
             new_font_size = math.floor(10 * new_scroll_ratio)
-            self.text_variable.set(self.text)
+            self.text_variable.set(self.generation.text)
         else:
-            self.text_variable.set(self.text)
+            self.text_variable.set(self.generation.text)
         self.text_widget.config(font=("Arial", new_font_size))
-
-        for child in self.generation_children:
-            child.on_any_zoom(new_scroll_ratio)
+        self._for_all_children(lambda child: child.on_any_zoom(new_scroll_ratio))
 
 
-class GenerationTree(tk.Frame):
-    def __init__(self, parent):
-        super().__init__(parent)
+class GenerationTreeView:
+    def __init__(self, parent_widget, root_generation):
         self.scroll_ratio = 1
+        self.parent_widget = parent_widget
+        self.root_generation = root_generation
+        self.root_generation_view = None
+        self.controller = None
+        self.single_generation_views = {}
 
-        self.create_widgets(parent)
-        self.configure_ui()
-
-    def create_widgets(self, parent):
-        self.horizontal_bar = ttk.Scrollbar(parent, orient=tk.HORIZONTAL)
-        self.vertical_bar = ttk.Scrollbar(parent, orient=tk.VERTICAL)
+    def create_widgets(self):
+        self.horizontal_bar = ttk.Scrollbar(self.parent_widget, orient=tk.HORIZONTAL)
+        self.vertical_bar = ttk.Scrollbar(self.parent_widget, orient=tk.VERTICAL)
         self.canvas = tk.Canvas(
-            parent,
+            self.parent_widget,
             width=750,
             height=550,
             yscrollcommand=self.vertical_bar.set,
@@ -148,50 +160,45 @@ class GenerationTree(tk.Frame):
         )
         self.horizontal_bar["command"] = self.canvas.xview
         self.vertical_bar["command"] = self.canvas.yview
+        self.root_generation_view = self.draw(self.root_generation)
 
-        # test data goes here
-        root_generation = GenerationWidget(self.canvas, self, lorem.paragraph())
-        for idx in range(5):
-            child_generation = root_generation.add_child(lorem.paragraph())
-            if idx == 2:
-                for _ in range(3):
-                    child_generation.add_child(lorem.paragraph())
+    def draw(self, generation: Generation, x=50, y=50) -> SingleGenerationView:
+        # create widget from generation
+        single_generation_view = SingleGenerationView(self.canvas, self, generation)
+        self.single_generation_views[generation.id] = single_generation_view
+        single_generation_view.create_widgets()
 
-        self.generations = [root_generation]
-        self.draw(root_generation)
-
-    def draw(self, root_generation, x=50, y=50):
-        root_object_id = self.canvas.create_window(
-            x, y, anchor="nw", window=root_generation
+        canvas_object_id = self.canvas.create_window(
+            x, y, anchor="nw", window=single_generation_view
         )
-        root_generation.canvas_object_id = root_object_id
-        root_generation_coords = self.canvas.coords(root_object_id)
+        single_generation_view.canvas_object_id = canvas_object_id
+        node_coords = self.canvas.coords(canvas_object_id)
 
-        for index, child_generation in enumerate(root_generation.generation_children):
-            child_object_id = self.draw(
-                child_generation, x=x + 400, y=y + (150 * index)
-            )
-            child_coords = self.canvas.coords(child_object_id)
-            self.canvas.create_line(
-                root_generation_coords[0] + 150,
-                root_generation_coords[1],
+        for index, child_id in enumerate(generation.children):
+            child_generation = self.controller.generation_map[child_id]
+            child_view = self.draw(child_generation, x=x + 400, y=y + (150 * index))
+            child_coords = self.canvas.coords(child_view.canvas_object_id)
+            child_view.parent_line_canvas_id = self.canvas.create_line(
+                node_coords[0] + 150,
+                node_coords[1],
                 *child_coords,
                 fill="green",
-                width=3
+                width=3,
             )
 
-        return root_object_id
+        single_generation_view.configure_ui()
+        return single_generation_view
 
-    def on_new_child(self, generation):
+    def on_new_child(self, generation_view: SingleGenerationView):
         """redraw entire generation. generation must be the parent of the
         new child being created. see GenerationWidget.on_wanted_add()"""
 
         # TODO adding new children should only involve drawing the line
         # and the new widget. this method causes memory leaks as we're just
         # drawing on top of the old widgets
-
-        coords = self.canvas.coords(generation.canvas_object_id)
-        self.draw(generation, x=coords[0], y=coords[1])
+        assert generation_view.canvas_object_id is not None
+        coords = self.canvas.coords(generation_view.canvas_object_id)
+        self.draw(generation_view.generation, x=coords[0], y=coords[1])
 
     def configure_ui(self):
         # zoom code refactored from loom
@@ -205,11 +212,11 @@ class GenerationTree(tk.Frame):
         self.horizontal_bar.grid(column=0, row=1, sticky=(tk.W, tk.E))
         self.vertical_bar.grid(column=1, row=0, sticky=(tk.N, tk.S))
         self.canvas.grid(row=0, column=0)
+        # self.tree.place(x=0, y=0)
 
     def on_any_zoom(self):
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-        for gen in self.generations:
-            gen.on_any_zoom(self.scroll_ratio)
+        self.root_generation_view.on_any_zoom(self.scroll_ratio)
 
     def on_y_scroll_up(self, event):
         self.canvas.yview_scroll(-1, "units")
@@ -234,19 +241,87 @@ class GenerationTree(tk.Frame):
         self.on_any_zoom()
 
 
+class GenerationTreeController:
+    def __init__(self, root_generation: Generation, tree_view: GenerationTreeView):
+        self.root_generation = root_generation
+        self.tree_view = tree_view
+        self.generation_map = {root_generation.id: root_generation}
+
+    def add_child(self, parent_node_id: str, text: str) -> "Generation":
+        new_child = Generation(
+            id=new_uuid(),
+            state=GenerationState.GENERATED,
+            text=text,
+            parent=parent_node_id,
+        )
+        self.generation_map[new_child.id] = new_child
+        self.generation_map[parent_node_id].children.append(new_child.id)
+        return new_child
+
+    def start(self):
+        self.tree_view.create_widgets()
+        self.tree_view.configure_ui()
+
+    # def add_child(self, node_id):
+    #    new_child = self.generation_map[node_id].add_child(lorem.paragraph())
+
+    #    # since the current node got a child, that means the parent
+    #    # might need to organise things differently
+    #    self.tree_view.refresh_node(node.parent)
+
+
 class Window(tk.Tk):
     def __init__(self, ctx):
-        self.root = tk.Tk()
-        self.root.title("SYNTHNAV UI TEST")
-        self.root.geometry("800x600")
+        super().__init__()
+        self.title("SYNTHNAV UI TEST")
+        self.geometry("800x600")
 
-        self.style = ttk.Style()
-        self.style.configure("BW.TLabel", foreground="black", background="white")
+        root_generation = Generation(
+            id=new_uuid(),
+            state=GenerationState.GENERATED,
+            text=lorem.paragraph(),
+            parent=None,
+        )
 
-        self.tree = GenerationTree(self.root)
-        self.tree.place(x=0, y=0)
+        self.tree = GenerationTreeView(self, root_generation)
+        self.tree_controller = GenerationTreeController(root_generation, self.tree)
+        self.tree.controller = self.tree_controller
+
+        for idx in range(5):
+            child_generation = self.tree_controller.add_child(
+                root_generation.id, lorem.paragraph()
+            )
+            if idx == 0:
+                for _ in range(5):
+                    self.tree_controller.add_child(
+                        child_generation.id, lorem.paragraph()
+                    )
+            if idx == 2:
+                for _ in range(3):
+                    self.tree_controller.add_child(
+                        child_generation.id, lorem.paragraph()
+                    )
+
+        self.tree_controller.start()
+
+        self.error_text_variable = tk.StringVar()
+        self.error_text_variable.set("")
+
+        self.error_text = tk.Label(self, textvariable=self.error_text_variable)
+        self.error_text.grid(row=2, column=0)
+        self.error_text.configure(fg="red")
+
+    def report_callback_exception(self, exc, val, tb):
+        try:
+            log.exception("shit happened: %r %r", exc, val)
+            if len(val.args) > 0:
+                self.error_text_variable.set(f"error: {exc!s} {val.args[0]}")
+            else:
+                self.error_text_variable.set(f"error: {val!s}")
+        except:
+            log.exception("shit happened while handling shit")
 
     async def update_forever(self):
         while True:
-            self.root.update()
+            self.update()
             await asyncio.sleep(0.025)
