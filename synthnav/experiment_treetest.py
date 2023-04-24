@@ -192,4 +192,4 @@ class Window(tk.Tk):
     async def update_forever(self):
         while True:
             self.root.update()
-            await asyncio.sleep(0.05)
+            await asyncio.sleep(0.025)
