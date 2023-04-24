@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import tkinter as tk
 from tkinter import ttk
 from .generate import generate_text
+from .experiment_treetest import UIMockup
 
 
 log = logging.getLogger(__name__)
@@ -21,6 +22,11 @@ class App:
             log.info("main window was cancelled, assuming shutdown")
 
 
+def _select_all(event):
+    event.widget.select_range(0, "end")
+    event.widget.icursor("end")
+
+
 class Window(tk.Tk):
     def __init__(self, ctx):
         self.root = tk.Tk()
@@ -31,6 +37,7 @@ class Window(tk.Tk):
         self.prompt_text = tk.StringVar()
         self.prompt_widget["textvariable"] = self.prompt_text
         self.prompt_widget.bind("<Key-Return>", self.generate_prompt)
+        self.prompt_widget.bind("<Control-KeyRelease-a>", _select_all)
 
         self.output_text = tk.StringVar()
         self.output_widget = tk.Label(
@@ -51,7 +58,7 @@ class Window(tk.Tk):
     async def update_forever(self):
         while True:
             self.root.update()
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.05)
 
 
 @dataclass
@@ -65,5 +72,6 @@ def main():
     )
     log.info("boot")
     ctx = Context(None)
-    asyncio.run(App().run_forever(ctx))
+    # asyncio.run(App().run_forever(ctx))
+    asyncio.run(UIMockup().run_forever(ctx))
     log.info("shutdown")
