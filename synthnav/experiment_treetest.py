@@ -148,8 +148,8 @@ class GenerationTree(tk.Frame):
         self.canvas.bind("<Control-Button-5>", self.on_zoom_out)
         self.canvas.bind("<Button-4>", self.on_y_scroll_up)
         self.canvas.bind("<Button-5>", self.on_y_scroll_down)
-        # self.canvas.bind("<Shift-Button-4>", self.on_x_scroll_up)
-        # self.canvas.bind("<Shift-Button-5>", self.on_x_scroll_down)
+        self.canvas.bind("<Shift-Button-4>", self.on_x_scroll_up)
+        self.canvas.bind("<Shift-Button-5>", self.on_x_scroll_down)
 
         self.horizontal_bar.grid(column=0, row=1, sticky=(tk.W, tk.E))
         self.vertical_bar.grid(column=1, row=0, sticky=(tk.N, tk.S))
@@ -161,10 +161,16 @@ class GenerationTree(tk.Frame):
             gen.on_any_zoom(self.scroll_ratio)
 
     def on_y_scroll_up(self, event):
-        pass
+        self.canvas.yview_scroll(-1, "units")
 
     def on_y_scroll_down(self, event):
-        pass
+        self.canvas.yview_scroll(1, "units")
+
+    def on_x_scroll_up(self, event):
+        self.canvas.xview_scroll(-1, "units")
+
+    def on_x_scroll_down(self, event):
+        self.canvas.xview_scroll(1, "units")
 
     def on_zoom_in(self, event):
         self.scroll_ratio *= 1.1
