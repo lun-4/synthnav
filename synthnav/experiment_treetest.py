@@ -4,7 +4,7 @@ import logging
 import asyncio
 import lorem
 import tkinter as tk
-from typing import List
+from typing import List, Tuple
 from tkinter import ttk
 from uuid import UUID, uuid4 as new_uuid
 from idlelib.tooltip import Hovertip
@@ -125,6 +125,12 @@ class SingleGenerationView(tk.Frame):
         for child_id in self.generation.children:
             callback(self.tree_view.single_generation_views[child_id])
 
+    def debugprint(self, ident=0):
+        print("\t" * ident, self.generation.id)
+        for child_id in self.generation.children:
+            child = self.tree_view.single_generation_views[child_id]
+            child.debugprint(ident=ident + 1)
+
     def on_any_zoom(self, new_scroll_ratio):
         # TODO hide text on far enough zoom
         new_font_size = 10
@@ -160,23 +166,38 @@ class GenerationTreeView:
         )
         self.horizontal_bar["command"] = self.canvas.xview
         self.vertical_bar["command"] = self.canvas.yview
-        self.root_generation_view = self.draw(self.root_generation)
+        self.root_generation_view, total_root_height = self.draw(self.root_generation)
+        self.root_generation_view.debugprint()
 
-    def draw(self, generation: Generation, x=50, y=50) -> SingleGenerationView:
+    def draw(
+        self, generation: Generation, x=50, y=50
+    ) -> Tuple[SingleGenerationView, int]:
         # create widget from generation
         single_generation_view = SingleGenerationView(self.canvas, self, generation)
         self.single_generation_views[generation.id] = single_generation_view
         single_generation_view.create_widgets()
 
+        identstr = "\t" * int(x / 400)
+        log.debug("%s %s %d %d", identstr, generation.id, x, y)
         canvas_object_id = self.canvas.create_window(
             x, y, anchor="nw", window=single_generation_view
         )
         single_generation_view.canvas_object_id = canvas_object_id
         node_coords = self.canvas.coords(canvas_object_id)
 
+        # TODO make it dynamic based on text lul
+        SINGLE_ELEMENT_PIXEL_HEIGHT = 161
+        total_node_height = SINGLE_ELEMENT_PIXEL_HEIGHT
+        last_child_height = SINGLE_ELEMENT_PIXEL_HEIGHT
+
         for index, child_id in enumerate(generation.children):
             child_generation = self.controller.generation_map[child_id]
-            child_view = self.draw(child_generation, x=x + 400, y=y + (150 * index))
+            child_view, child_height = self.draw(
+                child_generation,
+                x=x + 400,
+                y=y,
+            )
+            y += child_height
             child_coords = self.canvas.coords(child_view.canvas_object_id)
             child_view.parent_line_canvas_id = self.canvas.create_line(
                 node_coords[0] + 150,
@@ -185,9 +206,17 @@ class GenerationTreeView:
                 fill="green",
                 width=3,
             )
+            total_node_height += child_height
+            last_child_height = child_height
 
+            log.debug(
+                " %s|-> %s height=%d",
+                identstr,
+                child_id,
+                child_height,
+            )
         single_generation_view.configure_ui()
-        return single_generation_view
+        return single_generation_view, total_node_height
 
     def on_new_child(self, generation_view: SingleGenerationView):
         """redraw entire generation. generation must be the parent of the
