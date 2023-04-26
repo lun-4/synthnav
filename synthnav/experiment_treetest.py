@@ -173,7 +173,6 @@ class SingleGenerationView(tk.Frame):
                 self.text_widget.configure(width=0, height=0, state="disabled")
 
     def on_any_zoom(self, new_scroll_ratio):
-        # TODO hide text on far enough zoom
         new_font_size = 10
         if new_scroll_ratio < 0.4:
             self.update_ui_text("")
