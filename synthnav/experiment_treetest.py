@@ -92,9 +92,7 @@ class SingleGenerationView(tk.Frame):
                     self, textvariable=self.text_variable, wraplength=300
                 )
             case GenerationState.EDITING:
-                self.text_widget = tk.Entry(
-                    self, textvariable=self.text_variable, wraplength=300
-                )
+                self.to_editable()
 
         self.buttons = tk.Frame(self)
         self.edit_button = tk.Button(
@@ -128,19 +126,23 @@ class SingleGenerationView(tk.Frame):
         match self.generation.state:
             case GenerationState.GENERATED:
                 self.text_widget.config(bg="gray51", fg="white")
-            case GenerationState.EDITING:
-                self.text_widget.config(bg="red", fg="white")
+            # case GenerationState.EDITING:
+            #    self.text_widget.config(bg="red", fg="white")
+
+    def to_editable(self, *, destroy: bool = False, focus: bool = False):
+        if destroy:
+            self.text_widget.destroy()
+
+        self.text_widget = tk.Text(self, width=40, height=5)
+        self.text_widget.insert(tk.INSERT, self.text_variable.get())
+        self.text_widget.grid(row=0, column=0)
+        if focus:
+            self.text_widget.focus_set()
 
     def on_wanted_edit(self):
         match self.generation.state:
             case GenerationState.GENERATED:
-                self.entry_widget = tk.Text(self.text_widget, width=300, height=20)
-                self.entry_widget.insert(tk.INSERT, self.text_variable.get())
-                self.entry_widget.place(
-                    x=0, y=0, anchor="nw", relwidth=1.0, relheight=1.0
-                )
-                self.entry_widget.focus_set()
-                self.text_widget = self.entry_widget
+                self.to_editable(destroy=True, focus=True)
 
             case GenerationState.EDITING:
                 pass
@@ -156,16 +158,30 @@ class SingleGenerationView(tk.Frame):
             child = self.tree_view.single_generation_views[child_id]
             child.debugprint(ident=ident + 1)
 
+    def update_ui_text(self, new_text: str) -> None:
+        self.text_variable.set(new_text)
+
+        # if self.text_widget is tk.Text, its not bound to text_variable.
+        # delete everything then insert the new text
+        if self.generation.state == GenerationState.EDITING:
+            self.text_widget.delete("1.0", "end")
+            if new_text:
+                self.text_widget.insert(tk.INSERT, self.text_variable.get())
+                self.text_widget.configure(width=40, height=5, state="normal")
+            else:
+                # set width and height to 0
+                self.text_widget.configure(width=0, height=0, state="disabled")
+
     def on_any_zoom(self, new_scroll_ratio):
         # TODO hide text on far enough zoom
         new_font_size = 10
         if new_scroll_ratio < 0.4:
-            self.text_variable.set("")
+            self.update_ui_text("")
         elif new_scroll_ratio < 1.0:
             new_font_size = math.floor(10 * new_scroll_ratio)
-            self.text_variable.set(self.generation.text)
+            self.update_ui_text(self.generation.text)
         else:
-            self.text_variable.set(self.generation.text)
+            self.update_ui_text(self.generation.text)
         self.text_widget.config(font=("Arial", new_font_size))
         self._for_all_children(lambda child: child.on_any_zoom(new_scroll_ratio))
 
@@ -256,6 +272,8 @@ class GenerationTreeView:
         """redraw entire generation. generation must be the parent of the
         new child being created. see GenerationWidget.on_wanted_add()"""
 
+        # TODO maybe remove generation_view paarameter
+
         assert generation_view.canvas_object_id is not None
 
         old_cursor_x, old_cursor_y = self.canvas.canvasx(0), self.canvas.canvasy(0)
@@ -276,16 +294,6 @@ class GenerationTreeView:
         self.canvas.scale(
             "all", old_cursor_x, old_cursor_y, old_scroll_ratio, old_scroll_ratio
         )
-
-        # TODO recover zoom and scroll state from old canvas!!!
-
-        # TODO
-        #  - wipe the whole tree widget
-        #  - optimization: last layer of nodes is only an add, not a full redraw
-
-        # coords = self.canvas.coords(generation_view.canvas_object_id)
-        # TOD
-        # self.draw(generation_view.generation, x=coords[0], y=coords[1])
 
     def configure_ui(self):
         # zoom code refactored from loom
