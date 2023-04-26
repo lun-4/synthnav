@@ -12,6 +12,31 @@ from idlelib.tooltip import Hovertip
 log = logging.getLogger(__name__)
 
 
+def _canvas_xy_scroll_pixels_hackish_method(canvas, new_x, new_y):
+    # we only have "units" (which is xscrollincrement amount of pixels)
+    # or "pages" (which i believe is hardset to 9/10 * canvas width)
+    #
+    # https://anzeljg.github.io/rin2/book2/2405/docs/tkinter/canvas-methods.html
+    #
+    # so, the hack here is to set xscrollincrement to 1, then reset it back
+    # to normal after scrolling through using "units"
+
+    previous_increment = (
+        canvas["xscrollincrement"],
+        canvas["yscrollincrement"],
+    )
+    canvas["xscrollincrement"], canvas["yscrollincrement"] = (1, 1)
+
+    canvas.xview_moveto(0)
+    canvas.yview_moveto(0)
+    canvas.xview_scroll(int(new_x) + 1, tk.UNITS)
+    canvas.yview_scroll(int(new_y) + 1, tk.UNITS)
+    (
+        canvas["xscrollincrement"],
+        canvas["yscrollincrement"],
+    ) = previous_increment
+
+
 class UIMockup:
     async def run_forever(self, ctx):
         self.window = Window(ctx)
@@ -126,7 +151,7 @@ class SingleGenerationView(tk.Frame):
             callback(self.tree_view.single_generation_views[child_id])
 
     def debugprint(self, ident=0):
-        print("\t" * ident, self.generation.id)
+        log.debug("%s%s", "\t" * ident, self.generation.id)
         for child_id in self.generation.children:
             child = self.tree_view.single_generation_views[child_id]
             child.debugprint(ident=ident + 1)
@@ -155,6 +180,7 @@ class GenerationTreeView:
         self.single_generation_views = {}
 
     def create_widgets(self):
+        self.scroll_ratio = 1
         self.horizontal_bar = ttk.Scrollbar(self.parent_widget, orient=tk.HORIZONTAL)
         self.vertical_bar = ttk.Scrollbar(self.parent_widget, orient=tk.VERTICAL)
         self.canvas = tk.Canvas(
@@ -210,10 +236,18 @@ class GenerationTreeView:
             last_child_height = child_height
 
             log.debug(
-                " %s|-> %s height=%d",
+                "%s |-> %s height=%d",
                 identstr,
                 child_id,
                 child_height,
+            )
+            log.debug(
+                "%s     (line x1=%d,y1=%d -> x2=%d,y2=%d)",
+                identstr,
+                node_coords[0] + 150,
+                node_coords[1],
+                child_coords[0],
+                child_coords[1],
             )
         single_generation_view.configure_ui()
         return single_generation_view, total_node_height
@@ -222,12 +256,36 @@ class GenerationTreeView:
         """redraw entire generation. generation must be the parent of the
         new child being created. see GenerationWidget.on_wanted_add()"""
 
-        # TODO adding new children should only involve drawing the line
-        # and the new widget. this method causes memory leaks as we're just
-        # drawing on top of the old widgets
         assert generation_view.canvas_object_id is not None
-        coords = self.canvas.coords(generation_view.canvas_object_id)
-        self.draw(generation_view.generation, x=coords[0], y=coords[1])
+
+        old_cursor_x, old_cursor_y = self.canvas.canvasx(0), self.canvas.canvasy(0)
+        old_scroll_ratio = self.scroll_ratio
+
+        # refresh the entire tree
+        self.canvas.delete("all")
+        self.canvas.destroy()
+
+        # create it all
+        self.create_widgets()
+        self.configure_ui()
+
+        # set position and zoom
+        _canvas_xy_scroll_pixels_hackish_method(self.canvas, old_cursor_x, old_cursor_y)
+        self.scroll_ratio = old_scroll_ratio
+        self.on_any_zoom()
+        self.canvas.scale(
+            "all", old_cursor_x, old_cursor_y, old_scroll_ratio, old_scroll_ratio
+        )
+
+        # TODO recover zoom and scroll state from old canvas!!!
+
+        # TODO
+        #  - wipe the whole tree widget
+        #  - optimization: last layer of nodes is only an add, not a full redraw
+
+        # coords = self.canvas.coords(generation_view.canvas_object_id)
+        # TOD
+        # self.draw(generation_view.generation, x=coords[0], y=coords[1])
 
     def configure_ui(self):
         # zoom code refactored from loom
