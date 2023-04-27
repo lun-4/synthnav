@@ -7,6 +7,7 @@ import tkinter as tk
 from tkinter import ttk
 from .generate import generate_text
 from .experiment_treetest import UIMockup
+from .experiment_asyncio import AsyncExperiment
 
 
 log = logging.getLogger(__name__)
@@ -73,5 +74,6 @@ def main():
     log.info("boot")
     ctx = Context(None)
     # asyncio.run(App().run_forever(ctx))
-    asyncio.run(UIMockup().run_forever(ctx))
+    # asyncio.run(UIMockup().run_forever(ctx))
+    AsyncExperiment().start(ctx)
     log.info("shutdown")
