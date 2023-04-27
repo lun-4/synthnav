@@ -8,6 +8,7 @@ from typing import List, Tuple
 from tkinter import ttk
 from uuid import UUID, uuid4 as new_uuid
 from idlelib.tooltip import Hovertip
+from .experiment_asyncio import TkAsyncApplication
 
 log = logging.getLogger(__name__)
 
@@ -37,13 +38,9 @@ def _canvas_xy_scroll_pixels_hackish_method(canvas, new_x, new_y):
     ) = previous_increment
 
 
-class UIMockup:
-    async def run_forever(self, ctx):
-        self.window = Window(ctx)
-        try:
-            await self.window.update_forever()
-        except asyncio.CancelledError:
-            log.info("main window was cancelled, assuming shutdown")
+class UIMockup(TkAsyncApplication):
+    def setup_tk(self, ctx) -> tk.Tk:
+        return UIMockupWindow(ctx)
 
 
 class GenerationState(enum.IntEnum):
@@ -351,7 +348,7 @@ class GenerationTreeController:
         self.tree_view.configure_ui()
 
 
-class Window(tk.Tk):
+class UIMockupWindow(tk.Tk):
     def __init__(self, ctx):
         super().__init__()
         self.title("SYNTHNAV UI TEST")

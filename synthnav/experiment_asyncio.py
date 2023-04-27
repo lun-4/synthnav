@@ -4,8 +4,71 @@ import logging
 import tkinter as tk
 import asyncio
 import threading
+from enum import Enum
 
 log = logging.getLogger(__name__)
+
+
+class TkEvent(Enum):
+    QUIT = "<<Quit>>"
+
+
+class TkAsyncApplication:
+    def __init__(self):
+        self.queue_for_tk = queue.Queue()
+        self.thread_unsafe_loop = asyncio.get_event_loop()
+        self.thread_unsafe_tk = None
+        self._is_tk_setup = False
+
+    def await_run(self, coroutine):
+        asyncio.run_coroutine_threadsafe(coroutine, self.thread_unsafe_loop)
+
+    def tk_emit(self, tk_event: TkEvent):
+        log.debug("tk emit %s", tk_event)
+        self.thread_unsafe_tk.event_generate(tk_event.value, when="tail")
+
+    def tk_bind(self, tk_event: TkEvent, *args, **kwargs):
+        # TODO maybe use contextvars to assert tk_bind() is called from
+        # the thread tk came from?
+        #
+        # for now, lock tk_bind() after setup_tk is run
+        if self._is_tk_setup:
+            raise RuntimeError("tk_bind called after tk setup")
+        self.thread_unsafe_tk.bind(tk_event.value, *args, **kwargs)
+
+    def start_tk(self, ctx):
+        self.thread_unsafe_tk = self.setup_tk(ctx)
+        self.tk_bind(TkEvent.QUIT, lambda _: self.thread_unsafe_tk.destroy())
+        self._is_tk_setup = True
+        self.thread_unsafe_tk.mainloop()
+        log.info("tk stopped")
+
+    def start_asyncio(self, ctx):
+        self.thread_unsafe_loop.run_forever()
+        log.info("asyncio stopped")
+
+    def _start(self, ctx):
+        threads = [
+            threading.Thread(target=self.__class__.start_tk, args=[self, ctx]),
+            threading.Thread(target=self.__class__.start_asyncio, args=[self, ctx]),
+        ]
+        try:
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+        except KeyboardInterrupt:
+            log.info("shutdown")
+            self.thread_unsafe_loop.call_soon_threadsafe(self.thread_unsafe_loop.stop)
+            self.tk_emit(TkEvent.QUIT)
+        finally:
+            sys.exit(1)
+
+    def start(self, ctx):
+        try:
+            self._start(ctx)
+        except Exception:
+            log.exception("shit happened")
 
 
 class AsyncExperiment:
@@ -43,7 +106,7 @@ class AsyncExperiment:
         log.warning("asyncio stopped")
 
     def start(self, ctx):
-        loop = asyncio.get_event_loop()
+        self.loop = asyncio.get_event_loop()
         self.queue = queue.Queue()
         threads = [
             threading.Thread(target=AsyncExperiment.start_tk, args=[self, ctx, loop]),

@@ -74,6 +74,6 @@ def main():
     log.info("boot")
     ctx = Context(None)
     # asyncio.run(App().run_forever(ctx))
-    # asyncio.run(UIMockup().run_forever(ctx))
-    AsyncExperiment().start(ctx)
+    UIMockup().start(ctx)
+    # AsyncExperiment().start(ctx)
     log.info("shutdown")
