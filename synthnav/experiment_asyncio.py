@@ -48,19 +48,28 @@ class TkAsyncApplication:
         log.info("asyncio stopped")
 
     def _start(self, ctx):
+
+        # can't run tk in separate thread, from
+        # https://stackoverflow.com/questions/14694408/runtimeerror-main-thread-is-not-in-main-loop
+        #
+        # > Although Tkinter is technically thread-safe
+        # (assuming Tk is built with –enable-threads), practically
+        # speaking there are still problems when used in multithreaded
+        # Python applications. The problems stem from the fact that
+        # the _tkinter module attempts to gain control of the main
+        # thread via a polling technique when processing calls from other threads.
+
         threads = [
-            threading.Thread(target=self.__class__.start_tk, args=[self, ctx]),
             threading.Thread(target=self.__class__.start_asyncio, args=[self, ctx]),
         ]
         try:
             for thread in threads:
                 thread.start()
-            for thread in threads:
-                thread.join()
+
+            self.__class__.start_tk(self, ctx)
         except KeyboardInterrupt:
             log.info("shutdown")
             self.thread_unsafe_loop.call_soon_threadsafe(self.thread_unsafe_loop.stop)
-            self.tk_emit(TkEvent.QUIT)
         finally:
             sys.exit(1)
 
