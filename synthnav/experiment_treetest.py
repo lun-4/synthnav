@@ -114,8 +114,7 @@ class SingleGenerationView(tk.Frame):
         return self.tree_view.controller.add_child(self.generation.id, text)
 
     def on_wanted_add(self):
-        child = self.add_child(lorem.paragraph())
-        self.tree_view.on_new_child(self)
+        self.add_child(lorem.paragraph())
 
     def configure_ui(self):
         self.on_any_zoom(self.tree_view.scroll_ratio)
@@ -267,14 +266,7 @@ class GenerationTreeView:
         single_generation_view.configure_ui()
         return single_generation_view, total_node_height
 
-    def on_new_child(self, generation_view: SingleGenerationView):
-        """redraw entire generation. generation must be the parent of the
-        new child being created. see GenerationWidget.on_wanted_add()"""
-
-        # TODO maybe remove generation_view paarameter
-
-        assert generation_view.canvas_object_id is not None
-
+    def redraw(self):
         old_cursor_x, old_cursor_y = self.canvas.canvasx(0), self.canvas.canvasy(0)
         old_scroll_ratio = self.scroll_ratio
 
@@ -350,18 +342,13 @@ class GenerationTreeController:
         )
         self.generation_map[new_child.id] = new_child
         self.generation_map[parent_node_id].children.append(new_child.id)
+        if self.tree_view:
+            self.tree_view.redraw()
         return new_child
 
     def start(self):
         self.tree_view.create_widgets()
         self.tree_view.configure_ui()
-
-    # def add_child(self, node_id):
-    #    new_child = self.generation_map[node_id].add_child(lorem.paragraph())
-
-    #    # since the current node got a child, that means the parent
-    #    # might need to organise things differently
-    #    self.tree_view.refresh_node(node.parent)
 
 
 class Window(tk.Tk):
@@ -378,7 +365,7 @@ class Window(tk.Tk):
         )
 
         self.tree = GenerationTreeView(self, root_generation)
-        self.tree_controller = GenerationTreeController(root_generation, self.tree)
+        self.tree_controller = GenerationTreeController(root_generation, None)
         self.tree.controller = self.tree_controller
 
         for idx in range(5):
@@ -396,6 +383,7 @@ class Window(tk.Tk):
                         child_generation.id, lorem.paragraph()
                     )
 
+        self.tree_controller.tree_view = self.tree
         self.tree_controller.start()
 
         self.error_text_variable = tk.StringVar()
