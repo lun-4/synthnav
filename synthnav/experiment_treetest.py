@@ -1,14 +1,16 @@
+import os
 import math
 import enum
 import logging
 import asyncio
 import lorem
 import tkinter as tk
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 from tkinter import ttk
 from uuid import UUID, uuid4 as new_uuid
 from idlelib.tooltip import Hovertip
 from .experiment_asyncio import TkAsyncApplication
+from .generate import generate_text
 
 log = logging.getLogger(__name__)
 
@@ -39,8 +41,33 @@ def _canvas_xy_scroll_pixels_hackish_method(canvas, new_x, new_y):
 
 
 class UIMockup(TkAsyncApplication):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, *kwargs)
+
+    def handle_tk_message(self, *args, **kwargs):
+        message = self.queue_for_tk.get()
+        message_type = message[0]
+        message_args = message[1:]
+        match message[0]:
+            case "response":
+                self.thread_unsafe_tk.incoming_response(*message_args)
+        self.queue_for_tk.task_done()
+
+    async def _generate(self, new_generation_id: UUID, prompt: str):
+        async for incoming_response in generate_text(prompt):
+            actual_generated_text = incoming_response.lstrip(prompt)
+            log.debug("incoming response: %r", incoming_response)
+            self.tk_send(("response", new_generation_id, actual_generated_text))
+            # self.output_text.set(incoming_response)
+
+    async def spawn_generator(self, new_generation_id: UUID, prompt: str):
+        asyncio.create_task(self._generate(new_generation_id, prompt))
+
     def setup_tk(self, ctx) -> tk.Tk:
-        return UIMockupWindow(ctx)
+        if os.environ.get("MOCK"):
+            return UIMockupWindow(ctx)
+        else:
+            return RealUIWindow(self, ctx)
 
 
 class GenerationState(enum.IntEnum):
@@ -110,8 +137,22 @@ class SingleGenerationView(tk.Frame):
     def add_child(self, text):
         return self.tree_view.controller.add_child(self.generation.id, text)
 
+    def submit_text_to_generation(self):
+        match self.generation.state:
+            case GenerationState.GENERATED:
+                self.generation.text = self.text_variable.get()
+            case GenerationState.EDITING:
+                textbox_text = self.text_widget.get("1.0", "end")
+                if textbox_text:
+                    self.text_variable.set(textbox_text)
+                    self.generation.text = textbox_text
+
     def on_wanted_add(self):
-        self.add_child(lorem.paragraph())
+        self.submit_text_to_generation()
+        if os.environ.get("MOCK"):
+            self.add_child(lorem.paragraph())
+        else:
+            self.add_child("")
 
     def configure_ui(self):
         self.on_any_zoom(self.tree_view.scroll_ratio)
@@ -132,8 +173,15 @@ class SingleGenerationView(tk.Frame):
         self.text_widget = tk.Text(self, width=40, height=5)
         self.text_widget.insert(tk.INSERT, self.text_variable.get())
         self.text_widget.grid(row=0, column=0)
+        self.text_widget.bind("<Control-Key-a>", self.select_all_text_widget)
         if focus:
             self.text_widget.focus_set()
+
+    def select_all_text_widget(self, _event):
+        self.text_widget.tag_add(tk.SEL, "1.0", tk.END)
+        self.text_widget.mark_set(tk.INSERT, "1.0")
+        self.text_widget.see(tk.INSERT)
+        return "break"
 
     def on_wanted_edit(self):
         match self.generation.state:
@@ -323,14 +371,32 @@ class GenerationTreeView:
         self.canvas.scale("all", event.x, event.y, 0.9, 0.9)
         self.on_any_zoom()
 
+    def on_incoming_response(self, generation_id, text):
+        self.single_generation_views[generation_id].update_ui_text(text)
+
 
 class GenerationTreeController:
-    def __init__(self, root_generation: Generation, tree_view: GenerationTreeView):
+    def __init__(self, app, root_generation: Generation, tree_view: GenerationTreeView):
+        self.app = app
         self.root_generation = root_generation
         self.tree_view = tree_view
         self.generation_map = {root_generation.id: root_generation}
 
-    def add_child(self, parent_node_id: str, text: str) -> "Generation":
+    def prompt_from(self, node_id: str) -> None:
+        current_node = node_id
+        lines = []
+
+        while True:
+            if current_node is None:
+                break
+            generation = self.generation_map[current_node]
+            lines.append(generation.text.strip())
+            current_node = generation.parent
+        return "".join(reversed(lines))
+
+    def add_child(
+        self, parent_node_id: str, text: Optional[str] = None
+    ) -> "Generation":
         new_child = Generation(
             id=new_uuid(),
             state=GenerationState.GENERATED,
@@ -341,11 +407,61 @@ class GenerationTreeController:
         self.generation_map[parent_node_id].children.append(new_child.id)
         if self.tree_view:
             self.tree_view.redraw()
+        if not text:
+            prompt = self.prompt_from(parent_node_id)
+            self.app.await_run(self.app.spawn_generator(new_child.id, prompt))
         return new_child
+
+    def incoming_response(self, generation_id, text):
+        self.generation_map[generation_id].text = text
+        self.tree_view.on_incoming_response(generation_id, text)
 
     def start(self):
         self.tree_view.create_widgets()
         self.tree_view.configure_ui()
+
+
+class RealUIWindow(tk.Tk):
+    def __init__(self, app, ctx):
+        super().__init__()
+        self.app = app
+        print(self.app)
+        self.title("synthnav")
+        self.geometry("800x600")
+
+        root_generation = Generation(
+            id=new_uuid(),
+            state=GenerationState.EDITING,
+            text=lorem.paragraph(),
+            parent=None,
+        )
+
+        self.tree = GenerationTreeView(self, root_generation)
+        self.tree_controller = GenerationTreeController(self.app, root_generation, None)
+        self.tree.controller = self.tree_controller
+
+        self.tree_controller.tree_view = self.tree
+        self.tree_controller.start()
+
+        self.error_text_variable = tk.StringVar()
+        self.error_text_variable.set("")
+
+        self.error_text = tk.Label(self, textvariable=self.error_text_variable)
+        self.error_text.grid(row=2, column=0)
+        self.error_text.configure(fg="red")
+
+    def incoming_response(self, generation_id: UUID, text: str):
+        self.tree_controller.incoming_response(generation_id, text)
+
+    def report_callback_exception(self, exc, val, tb):
+        try:
+            log.exception("shit happened: %r %r", exc, val)
+            if len(val.args) > 0:
+                self.error_text_variable.set(f"error: {exc!s} {val.args[0]}")
+            else:
+                self.error_text_variable.set(f"error: {val!s}")
+        except:
+            log.exception("shit happened while handling shit")
 
 
 class UIMockupWindow(tk.Tk):
@@ -399,8 +515,3 @@ class UIMockupWindow(tk.Tk):
                 self.error_text_variable.set(f"error: {val!s}")
         except:
             log.exception("shit happened while handling shit")
-
-    async def update_forever(self):
-        while True:
-            self.update()
-            await asyncio.sleep(0.025)

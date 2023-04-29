@@ -22,7 +22,7 @@ def random_hash():
 async def generate_text(input_prompt):
     server = os.environ["SERVER_ADDR"]
     params = {
-        "max_new_tokens": 200,
+        "max_new_tokens": 100,
         "do_sample": True,
         "temperature": 0.72,
         "top_p": 0.73,

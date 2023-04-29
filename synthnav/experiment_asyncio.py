@@ -4,6 +4,7 @@ import logging
 import tkinter as tk
 import asyncio
 import threading
+from typing import Any
 from enum import Enum
 
 log = logging.getLogger(__name__)
@@ -11,6 +12,7 @@ log = logging.getLogger(__name__)
 
 class TkEvent(Enum):
     QUIT = "<<Quit>>"
+    NEW_MESSAGE = "<<NewMessage>>"
 
 
 class TkAsyncApplication:
@@ -21,11 +23,16 @@ class TkAsyncApplication:
         self._is_tk_setup = False
 
     def await_run(self, coroutine):
+        log.debug("run coro %r", coroutine)
         asyncio.run_coroutine_threadsafe(coroutine, self.thread_unsafe_loop)
 
     def tk_emit(self, tk_event: TkEvent):
         log.debug("tk emit %s", tk_event)
         self.thread_unsafe_tk.event_generate(tk_event.value, when="tail")
+
+    def tk_send(self, data: Any):
+        self.queue_for_tk.put(data)
+        self.tk_emit(TkEvent.NEW_MESSAGE)
 
     def tk_bind(self, tk_event: TkEvent, *args, **kwargs):
         # TODO maybe use contextvars to assert tk_bind() is called from
@@ -36,9 +43,13 @@ class TkAsyncApplication:
             raise RuntimeError("tk_bind called after tk setup")
         self.thread_unsafe_tk.bind(tk_event.value, *args, **kwargs)
 
+    def handle_tk_message(self, *args, **kwargs):
+        raise NotImplementedError()
+
     def start_tk(self, ctx):
         self.thread_unsafe_tk = self.setup_tk(ctx)
         self.tk_bind(TkEvent.QUIT, lambda _: self.thread_unsafe_tk.destroy())
+        self.tk_bind(TkEvent.NEW_MESSAGE, self.handle_tk_message)
         self._is_tk_setup = True
         self.thread_unsafe_tk.mainloop()
         log.info("tk stopped")
