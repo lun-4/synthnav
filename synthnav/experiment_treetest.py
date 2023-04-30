@@ -55,8 +55,8 @@ class UIMockup(TkAsyncApplication):
 
     async def _generate(self, new_generation_id: UUID, prompt: str):
         async for incoming_response in generate_text(prompt):
-            actual_generated_text = incoming_response.lstrip(prompt)
             log.debug("incoming response: %r", incoming_response)
+            actual_generated_text = incoming_response.lstrip(prompt)
             self.tk_send(("response", new_generation_id, actual_generated_text))
             # self.output_text.set(incoming_response)
 
@@ -64,10 +64,7 @@ class UIMockup(TkAsyncApplication):
         asyncio.create_task(self._generate(new_generation_id, prompt))
 
     def setup_tk(self, ctx) -> tk.Tk:
-        if os.environ.get("MOCK"):
-            return UIMockupWindow(ctx)
-        else:
-            return RealUIWindow(self, ctx)
+        return RealUIWindow(self, ctx)
 
 
 class GenerationState(enum.IntEnum):
@@ -110,13 +107,10 @@ class SingleGenerationView(tk.Frame):
         self.text_variable.set(self.generation.text)
 
     def create_widgets(self):
+        self.to_editable()
         match self.generation.state:
             case GenerationState.GENERATED:
-                self.text_widget = tk.Label(
-                    self, textvariable=self.text_variable, wraplength=300
-                )
-            case GenerationState.EDITING:
-                self.to_editable()
+                self.text_widget["state"] = "disabled"
 
         self.buttons = tk.Frame(self)
         self.edit_button = tk.Button(
@@ -138,14 +132,10 @@ class SingleGenerationView(tk.Frame):
         return self.tree_view.controller.add_child(self.generation.id, text)
 
     def submit_text_to_generation(self):
-        match self.generation.state:
-            case GenerationState.GENERATED:
-                self.generation.text = self.text_variable.get()
-            case GenerationState.EDITING:
-                textbox_text = self.text_widget.get("1.0", "end")
-                if textbox_text:
-                    self.text_variable.set(textbox_text)
-                    self.generation.text = textbox_text
+        textbox_text = self.text_widget.get("1.0", "end")
+        if textbox_text:
+            self.text_variable.set(textbox_text)
+            self.generation.text = textbox_text
 
     def on_wanted_add(self):
         self.submit_text_to_generation()
@@ -187,6 +177,7 @@ class SingleGenerationView(tk.Frame):
         match self.generation.state:
             case GenerationState.GENERATED:
                 self.to_editable(destroy=True, focus=True)
+                self.on_any_zoom(self.tree_view.scroll_ratio)
 
             case GenerationState.EDITING:
                 pass
@@ -205,16 +196,13 @@ class SingleGenerationView(tk.Frame):
     def update_ui_text(self, new_text: str) -> None:
         self.text_variable.set(new_text)
 
-        # if self.text_widget is tk.Text, its not bound to text_variable.
-        # delete everything then insert the new text
-        if self.generation.state == GenerationState.EDITING:
-            self.text_widget.delete("1.0", "end")
-            if new_text:
-                self.text_widget.insert(tk.INSERT, self.text_variable.get())
-                self.text_widget.configure(width=40, height=5, state="normal")
-            else:
-                # set width and height to 0
-                self.text_widget.configure(width=0, height=0, state="disabled")
+        self.text_widget.delete("1.0", "end")
+        if new_text:
+            self.text_widget.insert(tk.INSERT, self.text_variable.get())
+            self.text_widget.configure(width=40, height=5, state="normal")
+        else:
+            # set width and height to 0
+            self.text_widget.configure(width=0, height=0, state="disabled")
 
     def on_any_zoom(self, new_scroll_ratio):
         new_font_size = 10
