@@ -40,6 +40,24 @@ def _canvas_xy_scroll_pixels_hackish_method(canvas, new_x, new_y):
     ) = previous_increment
 
 
+import time
+
+
+def timerlog(log_title: str):
+    def wrapper(function):
+        def wrapper_wrapper(*args, **kwargs):
+            start_timestamp = time.monotonic()
+            val = function(*args, **kwargs)
+            end_timestamp = time.monotonic()
+            total_spent = round(end_timestamp - start_timestamp, 5) * 1000
+            log.info("%s spent %.2fms", log_title, total_spent)
+            return val
+
+        return wrapper_wrapper
+
+    return wrapper
+
+
 class UIMockup(TkAsyncApplication):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, *kwargs)
@@ -242,6 +260,7 @@ class GenerationTreeView:
         self.root_generation_view, total_root_height = self.draw(self.root_generation)
         self.root_generation_view.debugprint()
 
+    @timerlog("tree.draw")
     def draw(
         self, generation: Generation, x=50, y=50
     ) -> Tuple[SingleGenerationView, int]:
@@ -299,6 +318,7 @@ class GenerationTreeView:
         single_generation_view.configure_ui()
         return single_generation_view, total_node_height
 
+    @timerlog("tree.redraw")
     def redraw(self):
         old_cursor_x, old_cursor_y = self.canvas.canvasx(0), self.canvas.canvasy(0)
         old_scroll_ratio = self.scroll_ratio
