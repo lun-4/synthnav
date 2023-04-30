@@ -1,3 +1,4 @@
+import random
 import os
 import math
 import enum
@@ -471,6 +472,15 @@ class RealUIWindow(tk.Tk):
         self.tree = GenerationTreeView(self, root_generation)
         self.tree_controller = GenerationTreeController(self.app, root_generation, None)
         self.tree.controller = self.tree_controller
+
+        if os.environ.get("MOCK_NODE_AMOUNT"):
+            wanted_amount = int(os.environ.get("MOCK_NODE_AMOUNT"))
+            generations = [root_generation]
+            for _ in range(wanted_amount):
+                generation = random.choice(generations)
+                generations.append(
+                    self.tree_controller.add_child(generation.id, lorem.paragraph())
+                )
 
         self.tree_controller.tree_view = self.tree
         self.tree_controller.start()
