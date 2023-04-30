@@ -227,20 +227,32 @@ class SingleGenerationView(tk.Frame):
             # set width and height to 0
             self.text_widget.configure(width=0, height=0, state="disabled")
 
-    def hide(self):
+    def soft_hide(self):
         self.text_widget.configure(width=0, height=0, state="disabled")
         self.edit_button.config(text="", width=0, height=0)
         self.add_button.config(text="", width=0, height=0)
+
+    def full_hide(self):
+        self.text_widget.configure(width=0, height=0, state="disabled")
+        self.buttons.grid_forget()
 
     def unhide(self):
         self.text_widget.configure(width=40, height=5, state="disabled")
         self.edit_button.config(text=EDIT_BUTTON_TEXT)
         self.add_button.config(text=ADD_BUTTON_TEXT)
+        self.buttons.grid(row=0, column=1)
 
     def on_any_zoom(self, new_scroll_ratio):
         new_font_size = 10
-        if new_scroll_ratio < 0.4:
-            self.hide()
+
+        self.unhide()
+
+        if new_scroll_ratio < 0.1:
+            self.full_hide()
+            self._for_all_children(lambda child: child.on_any_zoom(new_scroll_ratio))
+            return
+        elif new_scroll_ratio < 0.4:
+            self.soft_hide()
             self._for_all_children(lambda child: child.on_any_zoom(new_scroll_ratio))
             return
         else:
