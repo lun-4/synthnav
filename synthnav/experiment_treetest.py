@@ -109,6 +109,10 @@ class Generation:
         self.children = children or []
 
 
+ADD_BUTTON_TEXT = "\N{HEAVY PLUS SIGN}"
+EDIT_BUTTON_TEXT = "\N{PENCIL}"
+
+
 class SingleGenerationView(tk.Frame):
     """Represents a single generation."""
 
@@ -132,12 +136,12 @@ class SingleGenerationView(tk.Frame):
 
         self.buttons = tk.Frame(self)
         self.edit_button = tk.Button(
-            self.buttons, text="\N{PENCIL}", command=self.on_wanted_edit
+            self.buttons, text=EDIT_BUTTON_TEXT, command=self.on_wanted_edit
         )
         self.edit_tip = Hovertip(self.edit_button, "Edit generation")
 
         self.add_button = tk.Button(
-            self.buttons, text="\N{HEAVY PLUS SIGN}", command=self.on_wanted_add
+            self.buttons, text=ADD_BUTTON_TEXT, command=self.on_wanted_add
         )
         self.add_tip = Hovertip(self.add_button, "Create generation from this")
 
@@ -211,7 +215,7 @@ class SingleGenerationView(tk.Frame):
             child = self.tree_view.single_generation_views[child_id]
             child.debugprint(ident=ident + 1)
 
-    def update_ui_text(self, new_text: str) -> None:
+    def _disabled_todo_remove_update_ui_text(self, new_text: str) -> None:
         self.text_variable.set(new_text)
 
         self.text_widget.delete("1.0", "end")
@@ -222,16 +226,32 @@ class SingleGenerationView(tk.Frame):
             # set width and height to 0
             self.text_widget.configure(width=0, height=0, state="disabled")
 
+    def hide(self):
+        self.text_widget.configure(width=0, height=0, state="disabled")
+        self.edit_button.config(text="", width=0, height=0)
+        self.add_button.config(text="", width=0, height=0)
+
+    def unhide(self):
+        self.text_widget.configure(width=40, height=5, state="disabled")
+        self.edit_button.config(text=EDIT_BUTTON_TEXT)
+        self.add_button.config(text=ADD_BUTTON_TEXT)
+
     def on_any_zoom(self, new_scroll_ratio):
         new_font_size = 10
         if new_scroll_ratio < 0.4:
-            self.update_ui_text("")
-        elif new_scroll_ratio < 1.0:
-            new_font_size = math.floor(10 * new_scroll_ratio)
-            self.update_ui_text(self.generation.text)
+            self.hide()
+            self._for_all_children(lambda child: child.on_any_zoom(new_scroll_ratio))
+            return
         else:
-            self.update_ui_text(self.generation.text)
+            self.unhide()
+
+        if new_scroll_ratio < 1.0:
+            new_font_size = math.floor(10 * new_scroll_ratio)
+
         self.text_widget.config(font=("Arial", new_font_size))
+        self.edit_button.config(font=("Arial", new_font_size))
+        self.add_button.config(font=("Arial", new_font_size))
+
         self._for_all_children(lambda child: child.on_any_zoom(new_scroll_ratio))
 
 
