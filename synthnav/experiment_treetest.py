@@ -245,8 +245,6 @@ class SingleGenerationView(tk.Frame):
     def on_any_zoom(self, new_scroll_ratio):
         new_font_size = 10
 
-        self.unhide()
-
         if new_scroll_ratio < 0.1:
             self.full_hide()
             self._for_all_children(lambda child: child.on_any_zoom(new_scroll_ratio))
@@ -360,9 +358,13 @@ class GenerationTreeView:
         old_cursor_x, old_cursor_y = self.canvas.canvasx(0), self.canvas.canvasy(0)
         old_scroll_ratio = self.scroll_ratio
 
+        # TODO instead of recreating the entire canvas by deleting
+        # everything and starting over, treat the SingleGenerationView we
+        # already got as something reusable, they'll just live in different
+        # (x,y) coordinates
+
         # refresh the entire tree
         self.canvas.delete("all")
-        self.canvas.destroy()
 
         # create it all
         self.create_widgets()
