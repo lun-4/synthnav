@@ -80,8 +80,8 @@ class TkAsyncApplication:
             self.__class__.start_tk(self, ctx)
         except KeyboardInterrupt:
             log.info("shutdown")
-            self.thread_unsafe_loop.call_soon_threadsafe(self.thread_unsafe_loop.stop)
         finally:
+            self.thread_unsafe_loop.call_soon_threadsafe(self.thread_unsafe_loop.stop)
             sys.exit(1)
 
     def start(self, ctx):
