@@ -487,7 +487,7 @@ class RealUIWindow(tk.Tk):
         self.tree_controller = GenerationTreeController(self.app, root_generation, None)
         self.tree.controller = self.tree_controller
 
-        if os.environ.get("MOCK_NODE_AMOUNT"):
+        if os.environ.get("MOCK") and os.environ.get("MOCK_NODE_AMOUNT"):
             wanted_amount = int(os.environ.get("MOCK_NODE_AMOUNT"))
             generations = [root_generation]
             for _ in range(wanted_amount):
