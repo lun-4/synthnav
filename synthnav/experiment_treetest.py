@@ -280,11 +280,11 @@ class GenerationTreeView:
         self.root_generation_view, total_root_height = self.draw(self.root_generation)
         self.root_generation_view.debugprint()
 
-    @timerlog("tree.draw")
     def draw(
         self, generation: Generation, x=50, y=50
     ) -> Tuple[SingleGenerationView, int]:
-        # create widget from generation
+        """Draw a generation and its children into the tree canvas,
+        recursively, starting at given x and y values."""
         single_generation_view = SingleGenerationView(self.canvas, self, generation)
         self.single_generation_views[generation.id] = single_generation_view
         single_generation_view.create_widgets()
@@ -297,10 +297,14 @@ class GenerationTreeView:
         single_generation_view.canvas_object_id = canvas_object_id
         node_coords = self.canvas.coords(canvas_object_id)
 
-        # TODO make it dynamic based on text lul
-        SINGLE_ELEMENT_PIXEL_HEIGHT = 161
-        total_node_height = SINGLE_ELEMENT_PIXEL_HEIGHT
-        last_child_height = SINGLE_ELEMENT_PIXEL_HEIGHT
+        # TODO winfo_height() is not working, not even with update()
+        # sprinkled around stuff. use 160 for now
+        current_node_height = 160
+
+        if not (generation.children):
+            complete_node_height = current_node_height
+        else:
+            complete_node_height = 0
 
         for index, child_id in enumerate(generation.children):
             child_generation = self.controller.generation_map[child_id]
@@ -318,8 +322,7 @@ class GenerationTreeView:
                 fill="green",
                 width=3,
             )
-            total_node_height += child_height
-            last_child_height = child_height
+            complete_node_height += child_height
 
             log.debug(
                 "%s |-> %s height=%d",
@@ -335,8 +338,9 @@ class GenerationTreeView:
                 child_coords[0],
                 child_coords[1],
             )
+
         single_generation_view.configure_ui()
-        return single_generation_view, total_node_height
+        return single_generation_view, complete_node_height
 
     @timerlog("tree.redraw")
     def redraw(self):

@@ -51,8 +51,13 @@ def tk_root_fixture() -> TkRootFixture:
     root.pump_events()
 
 
+@pytest.fixture(name="app")
+def app_fixture():
+    raise NotImplementedError("TODO")
+
+
 @pytest.fixture(name="tree")
-def test_tree_fixture(tk_root):
+def test_tree_fixture(tk_root, app):
     root_generation = Generation(
         id=new_uuid(),
         state=GenerationState.GENERATED,
@@ -60,7 +65,7 @@ def test_tree_fixture(tk_root):
         parent=None,
     )
     view = GenerationTreeView(tk_root, root_generation)
-    tree_controller = GenerationTreeController(root_generation, view)
+    tree_controller = GenerationTreeController(app, root_generation, view)
     view.controller = tree_controller
     tree_controller.start()
     return TestTreeFixture(
@@ -69,14 +74,14 @@ def test_tree_fixture(tk_root):
 
 
 @pytest.fixture(name="tree_mockgui")
-def test_tree_fixture_mocked_gui():
+def test_tree_fixture_mocked_gui(app):
     root_generation = Generation(
         id=new_uuid(),
         state=GenerationState.GENERATED,
         text=lorem.paragraph(),
         parent=None,
     )
-    tree_controller = GenerationTreeController(root_generation, MagicMock())
+    tree_controller = GenerationTreeController(app, root_generation, MagicMock())
     tree_controller.start()
     return TestTreeFixture(
         root=root_generation,
