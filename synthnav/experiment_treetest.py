@@ -216,16 +216,12 @@ class SingleGenerationView(tk.Frame):
             child = self.tree_view.single_generation_views[child_id]
             child.debugprint(ident=ident + 1)
 
-    def _disabled_todo_remove_update_ui_text(self, new_text: str) -> None:
+    def update_ui_text(self, new_text: str) -> None:
         self.text_variable.set(new_text)
 
         self.text_widget.delete("1.0", "end")
-        if new_text:
-            self.text_widget.insert(tk.INSERT, self.text_variable.get())
-            self.text_widget.configure(width=40, height=5, state="normal")
-        else:
-            # set width and height to 0
-            self.text_widget.configure(width=0, height=0, state="disabled")
+        self.text_widget.insert(tk.INSERT, self.text_variable.get())
+        self.text_widget.configure(width=40, height=5, state="normal")
 
     def soft_hide(self):
         self.text_widget.configure(width=0, height=0, state="disabled")
