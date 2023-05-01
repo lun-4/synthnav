@@ -8,6 +8,8 @@ import websockets
 
 log = logging.getLogger(__name__)
 
+GENERATION_LOCK = asyncio.Lock()
+
 
 async def generate_text(input_prompt):
     server = os.environ["SERVER_ADDR"]
@@ -38,22 +40,24 @@ async def generate_text(input_prompt):
 
     result = input_prompt
 
-    log.debug("connecting to %r", url)
-    async with websockets.connect(url) as websocket:
-        log.debug("connected to %r", url)
-        await websocket.send(json.dumps(request))
+    async with GENERATION_LOCK:
 
-        while True:
-            incoming_data = await websocket.recv()
-            incoming_data = json.loads(incoming_data)
+        log.debug("connecting to %r", url)
+        async with websockets.connect(url) as websocket:
+            log.debug("connected to %r", url)
+            await websocket.send(json.dumps(request))
 
-            match incoming_data["event"]:
-                case "text_stream":
-                    content = incoming_data["text"]
-                    result = result + content
-                    log.debug("got %r: %r", content, result)
-                    yield result
-                case "stream_end":
-                    return
+            while True:
+                incoming_data = await websocket.recv()
+                incoming_data = json.loads(incoming_data)
 
-        log.debug("reached end of stream, returning")
+                match incoming_data["event"]:
+                    case "text_stream":
+                        content = incoming_data["text"]
+                        result = result + content
+                        log.debug("got %r: %r", content, result)
+                        yield result
+                    case "stream_end":
+                        return
+
+    log.debug("reached end of stream, returning")
