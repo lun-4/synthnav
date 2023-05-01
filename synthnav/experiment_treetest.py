@@ -114,6 +114,7 @@ class Generation:
 
 ADD_BUTTON_TEXT = "\N{HEAVY PLUS SIGN}"
 EDIT_BUTTON_TEXT = "\N{PENCIL}"
+SERIALIZE_BUTTON_TEXT = "|"
 
 
 class SingleGenerationView(tk.Frame):
@@ -144,10 +145,16 @@ class SingleGenerationView(tk.Frame):
         )
         self.add_tip = Hovertip(self.add_button, "Create generation from this")
 
+        self.serialize_button = tk.Button(
+            self.buttons, text=SERIALIZE_BUTTON_TEXT, command=self.on_wanted_serialize
+        )
+        # TODO serialize_button tip
+
         self.text_widget.grid(row=0, column=0)
         self.buttons.grid(row=0, column=1)
         self.edit_button.grid(row=0, column=1, sticky="w")
         self.add_button.grid(row=1, column=1, sticky="w")
+        self.serialize_button.grid(row=2, column=1, sticky="w")
 
     def add_child(self, text):
         return self.tree_view.controller.add_child(self.generation.id, text)
@@ -164,6 +171,9 @@ class SingleGenerationView(tk.Frame):
             self.add_child(lorem.paragraph())
         else:
             self.add_child("")
+
+    def on_wanted_serialize(self):
+        self.tree_view.controller.serialize_from(self.generation.id)
 
     def configure_ui(self):
         self.on_any_zoom(self.tree_view.scroll_ratio)
@@ -224,8 +234,8 @@ class SingleGenerationView(tk.Frame):
 
     def soft_hide(self):
         self.text_widget.configure(width=0, height=0)
-        self.edit_button.config(text="", width=0, height=0)
-        self.add_button.config(text="", width=0, height=0)
+        for button in self.buttons.winfo_children():
+            button.config(text="", width=0, height=0)
 
     def full_hide(self):
         self.text_widget.configure(width=0, height=0)
@@ -235,6 +245,7 @@ class SingleGenerationView(tk.Frame):
         self.text_widget.configure(width=40, height=5)
         self.edit_button.config(text=EDIT_BUTTON_TEXT)
         self.add_button.config(text=ADD_BUTTON_TEXT)
+        self.serialize_button.config(text=SERIALIZE_BUTTON_TEXT)
         self.buttons.grid(row=0, column=1)
 
     def on_any_zoom(self, new_scroll_ratio):
@@ -261,8 +272,8 @@ class SingleGenerationView(tk.Frame):
                 new_font_size = math.floor(10 * new_scroll_ratio)
 
             self.text_widget.config(font=("Arial", new_font_size))
-            self.edit_button.config(font=("Arial", new_font_size))
-            self.add_button.config(font=("Arial", new_font_size))
+            for button in self.buttons.winfo_children():
+                button.config(font=("Arial", new_font_size))
 
 
 class GenerationTreeView:
@@ -464,6 +475,11 @@ class GenerationTreeController:
     def start(self):
         self.tree_view.create_widgets()
         self.tree_view.configure_ui()
+
+    def serialize_from(self, generation_id):
+        data = self.prompt_from(generation_id)
+        print("serialized form:")
+        print(data)
 
 
 class RealUIWindow(tk.Tk):
