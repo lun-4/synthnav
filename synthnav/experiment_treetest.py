@@ -215,12 +215,6 @@ class SingleGenerationView(tk.Frame):
         for child_id in self.generation.children:
             callback(self.tree_view.single_generation_views[child_id])
 
-    def debugprint(self, ident=0):
-        log.debug("%s%s", "\t" * ident, self.generation.id)
-        for child_id in self.generation.children:
-            child = self.tree_view.single_generation_views[child_id]
-            child.debugprint(ident=ident + 1)
-
     def update_ui_text(self, new_text: str) -> None:
         self.text_variable.set(new_text)
 
@@ -229,16 +223,16 @@ class SingleGenerationView(tk.Frame):
         self.text_widget.configure(width=40, height=5, state="normal")
 
     def soft_hide(self):
-        self.text_widget.configure(width=0, height=0, state="disabled")
+        self.text_widget.configure(width=0, height=0)
         self.edit_button.config(text="", width=0, height=0)
         self.add_button.config(text="", width=0, height=0)
 
     def full_hide(self):
-        self.text_widget.configure(width=0, height=0, state="disabled")
+        self.text_widget.configure(width=0, height=0)
         self.buttons.grid_forget()
 
     def unhide(self):
-        self.text_widget.configure(width=40, height=5, state="disabled")
+        self.text_widget.configure(width=40, height=5)
         self.edit_button.config(text=EDIT_BUTTON_TEXT)
         self.add_button.config(text=ADD_BUTTON_TEXT)
         self.buttons.grid(row=0, column=1)
@@ -294,7 +288,6 @@ class GenerationTreeView:
         self.horizontal_bar["command"] = self.canvas.xview
         self.vertical_bar["command"] = self.canvas.yview
         self.root_generation_view, total_root_height = self.draw(self.root_generation)
-        self.root_generation_view.debugprint()
 
     def draw(
         self, generation: Generation, x=50, y=50
