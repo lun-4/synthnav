@@ -131,10 +131,6 @@ class SingleGenerationView(tk.Frame):
 
     def create_widgets(self):
         self.to_editable()
-        match self.generation.state:
-            case GenerationState.GENERATED:
-                self.text_widget["state"] = "disabled"
-
         self.buttons = tk.Frame(self)
         self.edit_button = tk.Button(
             self.buttons, text=EDIT_BUTTON_TEXT, command=self.on_wanted_edit
@@ -187,6 +183,13 @@ class SingleGenerationView(tk.Frame):
         self.text_widget.insert(tk.INSERT, self.text_variable.get())
         self.text_widget.grid(row=0, column=0)
         self.text_widget.bind("<Control-Key-a>", self.select_all_text_widget)
+
+        match self.generation.state:
+            case GenerationState.GENERATED:
+                self.text_widget["state"] = "disabled"
+            case GenerationState.EDITING:
+                self.text_widget["state"] = "normal"
+
         if focus:
             self.text_widget.focus_set()
 
