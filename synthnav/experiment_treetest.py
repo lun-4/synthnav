@@ -4,6 +4,8 @@ import math
 import enum
 import logging
 import asyncio
+import contextlib
+import functools
 import lorem
 import tkinter as tk
 from typing import List, Tuple, Optional
@@ -244,25 +246,29 @@ class SingleGenerationView(tk.Frame):
     def on_any_zoom(self, new_scroll_ratio):
         new_font_size = 10
 
-        if new_scroll_ratio < 0.1:
-            self.full_hide()
-            self._for_all_children(lambda child: child.on_any_zoom(new_scroll_ratio))
-            return
-        elif new_scroll_ratio < 0.4:
-            self.soft_hide()
-            self._for_all_children(lambda child: child.on_any_zoom(new_scroll_ratio))
-            return
-        else:
-            self.unhide()
+        with contextlib.ExitStack() as stack:
+            stack.callback(
+                functools.partial(
+                    self._for_all_children,
+                    lambda child: child.on_any_zoom(new_scroll_ratio),
+                )
+            )
 
-        if new_scroll_ratio < 1.0:
-            new_font_size = math.floor(10 * new_scroll_ratio)
+            if new_scroll_ratio < 0.1:
+                self.full_hide()
+                return
+            elif new_scroll_ratio < 0.4:
+                self.soft_hide()
+                return
+            else:
+                self.unhide()
 
-        self.text_widget.config(font=("Arial", new_font_size))
-        self.edit_button.config(font=("Arial", new_font_size))
-        self.add_button.config(font=("Arial", new_font_size))
+            if new_scroll_ratio < 1.0:
+                new_font_size = math.floor(10 * new_scroll_ratio)
 
-        self._for_all_children(lambda child: child.on_any_zoom(new_scroll_ratio))
+            self.text_widget.config(font=("Arial", new_font_size))
+            self.edit_button.config(font=("Arial", new_font_size))
+            self.add_button.config(font=("Arial", new_font_size))
 
 
 class GenerationTreeView:
