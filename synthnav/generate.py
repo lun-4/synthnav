@@ -5,13 +5,17 @@ import logging
 import string
 import os
 import websockets
+from typing import Generator
 
 log = logging.getLogger(__name__)
 
 GENERATION_LOCK = asyncio.Lock()
 
 
-async def generate_text(input_prompt):
+async def generate_text(input_prompt: str, *, seed=-1) -> Generator[str, None, None]:
+    """From a givenv input prompt, spit out the tokens that compose the
+    textual completion of that prompt."""
+
     server = os.environ["SERVER_ADDR"]
     request = {
         "prompt": input_prompt,
@@ -28,7 +32,7 @@ async def generate_text(input_prompt):
         "penalty_alpha": 0,
         "length_penalty": 1,
         "early_stopping": False,
-        "seed": -1,
+        "seed": seed,
         "add_bos_token": True,
         "truncation_length": 2048,
         "ban_eos_token": False,
@@ -54,9 +58,8 @@ async def generate_text(input_prompt):
                 match incoming_data["event"]:
                     case "text_stream":
                         content = incoming_data["text"]
-                        result = result + content
-                        log.debug("got %r: %r", content, result)
-                        yield result
+                        log.debug("got %r", content)
+                        yield content
                     case "stream_end":
                         return
 

@@ -70,16 +70,13 @@ class UIMockup(TkAsyncApplication):
         message_type = message[0]
         message_args = message[1:]
         match message[0]:
-            case "response":
-                self.thread_unsafe_tk.incoming_response(*message_args)
+            case "new_incoming_token":
+                self.thread_unsafe_tk.incoming_token(*message_args)
         self.queue_for_tk.task_done()
 
     async def _generate(self, new_generation_id: UUID, prompt: str):
-        async for incoming_response in generate_text(prompt):
-            log.debug("incoming response: %r", incoming_response)
-            actual_generated_text = incoming_response.lstrip(prompt)
-            self.tk_send(("response", new_generation_id, actual_generated_text))
-            # self.output_text.set(incoming_response)
+        async for token in generate_text(prompt):
+            self.tk_send(("new_incoming_token", new_generation_id, token))
 
     async def spawn_generator(self, new_generation_id: UUID, prompt: str):
         asyncio.create_task(self._generate(new_generation_id, prompt))
@@ -230,6 +227,11 @@ class SingleGenerationView(tk.Frame):
 
         self.text_widget.delete("1.0", "end")
         self.text_widget.insert(tk.INSERT, self.text_variable.get())
+        self.text_widget.configure(width=40, height=5, state="normal")
+
+    def append_ui_text(self, text_to_append: str) -> None:
+        self.text_variable.set(self.generation.text)
+        self.text_widget.insert(tk.INSERT, text_to_append)
         self.text_widget.configure(width=40, height=5, state="normal")
 
     def soft_hide(self):
@@ -427,8 +429,8 @@ class GenerationTreeView:
         self.canvas.scale("all", event.x, event.y, 0.9, 0.9)
         self.on_any_zoom()
 
-    def on_incoming_response(self, generation_id, text):
-        self.single_generation_views[generation_id].update_ui_text(text)
+    def on_incoming_token(self, generation_id, text):
+        self.single_generation_views[generation_id].append_ui_text(text)
 
 
 class GenerationTreeController:
@@ -468,9 +470,11 @@ class GenerationTreeController:
             self.app.await_run(self.app.spawn_generator(new_child.id, prompt))
         return new_child
 
-    def incoming_response(self, generation_id, text):
-        self.generation_map[generation_id].text = text
-        self.tree_view.on_incoming_response(generation_id, text)
+    def incoming_token(self, generation_id, data: str):
+        self.generation_map[generation_id].text = (
+            self.generation_map[generation_id].text + data
+        )
+        self.tree_view.on_incoming_token(generation_id, data)
 
     def start(self):
         self.tree_view.create_widgets()
@@ -520,8 +524,8 @@ class RealUIWindow(tk.Tk):
         self.error_text.grid(row=2, column=0)
         self.error_text.configure(fg="red")
 
-    def incoming_response(self, generation_id: UUID, text: str):
-        self.tree_controller.incoming_response(generation_id, text)
+    def incoming_token(self, generation_id: UUID, text: str):
+        self.tree_controller.incoming_token(generation_id, text)
 
     def report_callback_exception(self, exc, val, tb):
         try:
