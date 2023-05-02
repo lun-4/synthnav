@@ -193,6 +193,10 @@ class SingleGenerationView(tk.Frame):
         self.text_widget.grid(row=0, column=0)
         self.text_widget.bind("<Control-Key-a>", self.select_all_text_widget)
 
+        log.debug(
+            "generation id %r, state %r", self.generation.id, self.generation.state
+        )
+
         match self.generation.state:
             case GenerationState.GENERATED:
                 self.text_widget["state"] = "disabled"
@@ -222,17 +226,11 @@ class SingleGenerationView(tk.Frame):
         for child_id in self.generation.children:
             callback(self.tree_view.single_generation_views[child_id])
 
-    def update_ui_text(self, new_text: str) -> None:
-        self.text_variable.set(new_text)
-
-        self.text_widget.delete("1.0", "end")
-        self.text_widget.insert(tk.INSERT, self.text_variable.get())
-        self.text_widget.configure(width=40, height=5, state="normal")
-
     def append_ui_text(self, text_to_append: str) -> None:
         self.text_variable.set(self.generation.text)
-        self.text_widget.insert(tk.INSERT, text_to_append)
-        self.text_widget.configure(width=40, height=5, state="normal")
+        self.text_widget.configure(state="normal")
+        self.text_widget.insert(tk.END, text_to_append)
+        self.text_widget.configure(state="disabled")
 
     def soft_hide(self):
         self.text_widget.configure(width=0, height=0)
@@ -467,6 +465,7 @@ class GenerationTreeController:
             self.tree_view.redraw()
         if not text:
             prompt = self.prompt_from(parent_node_id)
+            log.debug("creating child with prompt %r", prompt)
             self.app.await_run(self.app.spawn_generator(new_child.id, prompt))
         return new_child
 
