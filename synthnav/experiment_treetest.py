@@ -72,11 +72,14 @@ class UIMockup(TkAsyncApplication):
         match message[0]:
             case "new_incoming_token":
                 self.thread_unsafe_tk.incoming_token(*message_args)
+            case "finished_tokens":
+                self.thread_unsafe_tk.finished_tokens(*message_args)
         self.queue_for_tk.task_done()
 
     async def _generate(self, new_generation_id: UUID, prompt: str):
         async for token in generate_text(prompt):
             self.tk_send(("new_incoming_token", new_generation_id, token))
+        self.tk_send(("finished_tokens", new_generation_id))
 
     async def spawn_generator(self, new_generation_id: UUID, prompt: str):
         asyncio.create_task(self._generate(new_generation_id, prompt))
@@ -125,9 +128,6 @@ class SingleGenerationView(tk.Frame):
         self.tree_view = tree_view
         self.parent_widget = parent_widget
         self.generation = generation
-
-        self.text_variable = tk.StringVar()
-        self.text_variable.set(self.generation.text)
 
     def create_widgets(self):
         self.to_editable()
@@ -181,6 +181,8 @@ class SingleGenerationView(tk.Frame):
         match self.generation.state:
             case GenerationState.GENERATED:
                 self.text_widget.config(bg="gray51", fg="white")
+            case GenerationState.PENDING:
+                self.text_widget.config(bg="gray20", fg="white")
             # case GenerationState.EDITING:
             #    self.text_widget.config(bg="red", fg="white")
 
@@ -189,7 +191,7 @@ class SingleGenerationView(tk.Frame):
             self.text_widget.destroy()
 
         self.text_widget = tk.Text(self, width=40, height=5)
-        self.text_widget.insert(tk.INSERT, self.text_variable.get())
+        self.text_widget.insert(tk.INSERT, self.generation.text)
         self.text_widget.grid(row=0, column=0)
         self.text_widget.bind("<Control-Key-a>", self.select_all_text_widget)
 
@@ -198,7 +200,7 @@ class SingleGenerationView(tk.Frame):
         )
 
         match self.generation.state:
-            case GenerationState.GENERATED:
+            case GenerationState.GENERATED | GenerationState.PENDING:
                 self.text_widget["state"] = "disabled"
             case GenerationState.EDITING:
                 self.text_widget["state"] = "normal"
@@ -215,19 +217,18 @@ class SingleGenerationView(tk.Frame):
     def on_wanted_edit(self):
         match self.generation.state:
             case GenerationState.GENERATED:
+                self.generation.state = GenerationState.EDITING
                 self.to_editable(destroy=True, focus=True)
                 self.on_any_zoom(self.tree_view.scroll_ratio)
 
-            case GenerationState.EDITING:
+            case GenerationState.EDITING | GenerationState.PENDING:
                 pass
-        self.generation.state = GenerationState.EDITING
 
     def _for_all_children(self, callback):
         for child_id in self.generation.children:
             callback(self.tree_view.single_generation_views[child_id])
 
     def append_ui_text(self, text_to_append: str) -> None:
-        self.text_variable.set(self.generation.text)
         self.text_widget.configure(state="normal")
         self.text_widget.insert(tk.END, text_to_append)
         self.text_widget.configure(state="disabled")
@@ -455,7 +456,7 @@ class GenerationTreeController:
     ) -> "Generation":
         new_child = Generation(
             id=new_uuid(),
-            state=GenerationState.GENERATED,
+            state=GenerationState.PENDING,
             text=text,
             parent=parent_node_id,
         )
@@ -467,6 +468,8 @@ class GenerationTreeController:
             prompt = self.prompt_from(parent_node_id)
             log.debug("creating child with prompt %r", prompt)
             self.app.await_run(self.app.spawn_generator(new_child.id, prompt))
+        else:
+            new_child.state = GenerationState.GENERATED
         return new_child
 
     def incoming_token(self, generation_id, data: str):
@@ -474,6 +477,10 @@ class GenerationTreeController:
             self.generation_map[generation_id].text + data
         )
         self.tree_view.on_incoming_token(generation_id, data)
+
+    def finished_tokens(self, generation_id: UUID):
+        self.generation_map[generation_id].state = GenerationState.GENERATED
+        self.tree_view.single_generation_views[generation_id].on_state_change()
 
     def start(self):
         self.tree_view.create_widgets()
@@ -525,6 +532,9 @@ class RealUIWindow(tk.Tk):
 
     def incoming_token(self, generation_id: UUID, text: str):
         self.tree_controller.incoming_token(generation_id, text)
+
+    def finished_tokens(self, generation_id: UUID):
+        self.tree_controller.finished_tokens(generation_id)
 
     def report_callback_exception(self, exc, val, tb):
         try:
