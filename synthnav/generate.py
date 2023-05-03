@@ -5,41 +5,33 @@ import logging
 import string
 import os
 import websockets
+import random
+import dataclasses
 from typing import Generator
+from .config import GenerationSettings
 
 log = logging.getLogger(__name__)
 
 GENERATION_LOCK = asyncio.Lock()
 
 
-async def generate_text(input_prompt: str, *, seed=-1) -> Generator[str, None, None]:
-    """From a givenv input prompt, spit out the tokens that compose the
+async def generate_text(
+    input_prompt: str, *, settings: GenerationSettings, seed=-1
+) -> Generator[str, None, None]:
+    """From a given input prompt, spit out the tokens that compose the
     textual completion of that prompt."""
+
+    if seed == -1:
+        seed = random.randint(1, 2**31)
 
     server = os.environ["SERVER_ADDR"]
     request = {
-        "prompt": input_prompt,
-        "max_new_tokens": 100,
-        "do_sample": True,
-        "temperature": 0.75,
-        "top_p": 0.73,
-        "typical_p": 1,
-        "repetition_penalty": 1.18,
-        "top_k": 40,
-        "min_length": 0,
-        "no_repeat_ngram_size": 0,
-        "num_beams": 1,
-        "penalty_alpha": 0,
-        "length_penalty": 1,
-        "early_stopping": False,
-        "seed": seed,
-        "add_bos_token": True,
-        "truncation_length": 2048,
-        "ban_eos_token": False,
-        "skip_special_tokens": True,
-        "stopping_strings": [],
+        **{
+            "prompt": input_prompt,
+            "seed": seed,
+        },
+        **dataclasses.asdict(settings),
     }
-
     url = f"ws://{server}/api/v1/stream"
 
     result = input_prompt

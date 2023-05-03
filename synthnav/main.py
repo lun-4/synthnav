@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import tkinter as tk
 from tkinter import ttk
 from .generate import generate_text
+from .config import Config
 from .experiment_treetest import UIMockup
 from .experiment_asyncio import AsyncExperiment
 
@@ -64,7 +65,7 @@ class Window(tk.Tk):
 
 @dataclass
 class Context:
-    http_client: aiohttp.ClientSession
+    config: Config
 
 
 def main():
@@ -73,7 +74,7 @@ def main():
     )
     logging.getLogger("websockets.client").setLevel(logging.INFO)
     log.info("boot")
-    ctx = Context(None)
+    ctx = Context(Config.from_environ())
     # asyncio.run(App().run_forever(ctx))
     UIMockup().start(ctx)
     # AsyncExperiment().start(ctx)

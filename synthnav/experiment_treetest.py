@@ -13,6 +13,7 @@ from tkinter import ttk
 from uuid import UUID, uuid4 as new_uuid
 from idlelib.tooltip import Hovertip
 from .experiment_asyncio import TkAsyncApplication
+from .config import GenerationSettings
 from .generate import generate_text
 
 log = logging.getLogger(__name__)
@@ -76,13 +77,15 @@ class UIMockup(TkAsyncApplication):
                 self.thread_unsafe_tk.finished_tokens(*message_args)
         self.queue_for_tk.task_done()
 
-    async def _generate(self, new_generation_id: UUID, prompt: str):
-        async for token in generate_text(prompt):
+    async def _generate(
+        self, settings: GenerationSettings, new_generation_id: UUID, prompt: str
+    ):
+        async for token in generate_text(prompt, settings=settings):
             self.tk_send(("new_incoming_token", new_generation_id, token))
         self.tk_send(("finished_tokens", new_generation_id))
 
-    async def spawn_generator(self, new_generation_id: UUID, prompt: str):
-        asyncio.create_task(self._generate(new_generation_id, prompt))
+    async def spawn_generator(self, settings, new_generation_id: UUID, prompt: str):
+        asyncio.create_task(self._generate(settings, new_generation_id, prompt))
 
     def setup_tk(self, ctx) -> tk.Tk:
         return RealUIWindow(self, ctx)
@@ -441,8 +444,11 @@ class GenerationTreeView:
 
 
 class GenerationTreeController:
-    def __init__(self, app, root_generation: Generation, tree_view: GenerationTreeView):
+    def __init__(
+        self, app, window, root_generation: Generation, tree_view: GenerationTreeView
+    ):
         self.app = app
+        self.window = window
         self.root_generation = root_generation
         self.tree_view = tree_view
         self.generation_map = {root_generation.id: root_generation}
@@ -475,7 +481,11 @@ class GenerationTreeController:
         if not text:
             prompt = self.prompt_from(parent_node_id)
             log.debug("creating child with prompt %r", prompt)
-            self.app.await_run(self.app.spawn_generator(new_child.id, prompt))
+            self.app.await_run(
+                self.app.spawn_generator(
+                    self.window.ctx.config.generation_settings, new_child.id, prompt
+                )
+            )
         else:
             new_child.state = GenerationState.GENERATED
         return new_child
@@ -504,6 +514,7 @@ class RealUIWindow(tk.Tk):
     def __init__(self, app, ctx):
         super().__init__()
         self.app = app
+        self.ctx = ctx
         print(self.app)
         self.title("synthnav")
         self.geometry("800x600")
@@ -516,7 +527,9 @@ class RealUIWindow(tk.Tk):
         )
 
         self.tree = GenerationTreeView(self, root_generation)
-        self.tree_controller = GenerationTreeController(self.app, root_generation, None)
+        self.tree_controller = GenerationTreeController(
+            self.app, self, root_generation, None
+        )
         self.tree.controller = self.tree_controller
 
         if os.environ.get("MOCK") and os.environ.get("MOCK_NODE_AMOUNT"):
