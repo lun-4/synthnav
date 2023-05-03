@@ -157,9 +157,17 @@ class SingleGenerationView(tk.Frame):
         return self.tree_view.controller.add_child(self.generation.id, text)
 
     def submit_text_to_generation(self):
+        # tk.Text will add an extra newline at the end of the text
+        # which cascades into badly generated text as things go
+        #
+        # so, strip off only the last newline character from textbox_text
+        # as users may want to actually submit 30 newlines.
         textbox_text = self.text_widget.get("1.0", "end")
+
         if textbox_text:
-            self.text_variable.set(textbox_text)
+            if textbox_text.endswith("\n"):
+                textbox_text = textbox_text[:-1]
+
             self.generation.text = textbox_text
 
     def on_wanted_add(self):
