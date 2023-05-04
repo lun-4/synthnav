@@ -532,8 +532,8 @@ class RealUIWindow(tk.Tk):
         )
         self.tree.controller = self.tree_controller
 
-        if os.environ.get("MOCK") and os.environ.get("MOCK_NODE_AMOUNT"):
-            wanted_amount = int(os.environ.get("MOCK_NODE_AMOUNT"))
+        if ctx.config.mock and ctx.config.mock_node_amount:
+            wanted_amount = int(ctx.config.mock_node_amount)
             generations = [root_generation]
             for _ in range(wanted_amount):
                 generation = random.choice(generations)
@@ -556,59 +556,6 @@ class RealUIWindow(tk.Tk):
 
     def finished_tokens(self, generation_id: UUID):
         self.tree_controller.finished_tokens(generation_id)
-
-    def report_callback_exception(self, exc, val, tb):
-        try:
-            log.exception("shit happened: %r %r", exc, val)
-            if len(val.args) > 0:
-                self.error_text_variable.set(f"error: {exc!s} {val.args[0]}")
-            else:
-                self.error_text_variable.set(f"error: {val!s}")
-        except:
-            log.exception("shit happened while handling shit")
-
-
-class UIMockupWindow(tk.Tk):
-    def __init__(self, ctx):
-        super().__init__()
-        self.title("SYNTHNAV UI TEST")
-        self.geometry("800x600")
-
-        root_generation = Generation(
-            id=new_uuid(),
-            state=GenerationState.GENERATED,
-            text=lorem.paragraph(),
-            parent=None,
-        )
-
-        self.tree = GenerationTreeView(self, root_generation)
-        self.tree_controller = GenerationTreeController(root_generation, None)
-        self.tree.controller = self.tree_controller
-
-        for idx in range(5):
-            child_generation = self.tree_controller.add_child(
-                root_generation.id, lorem.paragraph()
-            )
-            if idx == 0:
-                for _ in range(5):
-                    self.tree_controller.add_child(
-                        child_generation.id, lorem.paragraph()
-                    )
-            if idx == 2:
-                for _ in range(3):
-                    self.tree_controller.add_child(
-                        child_generation.id, lorem.paragraph()
-                    )
-
-        self.tree_controller.tree_view = self.tree
-        self.tree_controller.start()
-
-        self.error_text_variable = tk.StringVar()
-        self.error_text_variable.set("")
-
-        self.error_text = tk.Label(self, textvariable=self.error_text_variable)
-        self.error_text.grid(row=2, column=0)
-        self.error_text.configure(fg="red")
 
     def report_callback_exception(self, exc, val, tb):
         try:
