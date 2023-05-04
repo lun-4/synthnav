@@ -13,7 +13,7 @@ from tkinter import ttk
 from uuid import UUID, uuid4 as new_uuid
 from idlelib.tooltip import Hovertip
 from .experiment_asyncio import TkAsyncApplication
-from .config import GenerationSettings
+from .config import GenerationSettings, SettingsView
 from .generate import generate_text
 
 log = logging.getLogger(__name__)
@@ -519,6 +519,13 @@ class RealUIWindow(tk.Tk):
         self.title("synthnav")
         self.geometry("800x600")
 
+        # taken from https://tkdocs.com/tutorial/menus.html
+        self.option_add("*tearOff", tk.FALSE)
+        menu = tk.Menu(self)
+        self["menu"] = menu
+
+        menu.add_command(label="Settings", command=self.view_settings)
+
         root_generation = Generation(
             id=new_uuid(),
             state=GenerationState.EDITING,
@@ -550,6 +557,15 @@ class RealUIWindow(tk.Tk):
         self.error_text = tk.Label(self, textvariable=self.error_text_variable)
         self.error_text.grid(row=2, column=0)
         self.error_text.configure(fg="red")
+
+    def view_settings(self):
+        self.settings_view = SettingsView(self.ctx.config)
+        self.settings_view.create_widgets(self)
+
+        self.settings_view.toplevel.transient(self)  # dialog window is related to main
+        self.settings_view.toplevel.wait_visibility()  # can't grab until window appears, so we wait
+        self.settings_view.toplevel.grab_set()  # ensure all input goes to our window
+        self.settings_view.toplevel.wait_window()  # block until window is destroyed
 
     def incoming_token(self, generation_id: UUID, text: str):
         self.tree_controller.incoming_token(generation_id, text)
