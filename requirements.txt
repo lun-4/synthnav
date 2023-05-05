@@ -1,3 +1,6 @@
 aiohttp==3.8.4
 websockets==11.0.2
 pydantic==1.10.7
+# 'tk fontchooser' is not on tk API and is too buggy
+# see open cpython ticket https://github.com/python/cpython/issues/72880
+tkfontchooser==2.0.2

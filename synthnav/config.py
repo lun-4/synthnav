@@ -3,6 +3,7 @@ import tkinter as tk
 from tkinter import ttk
 from idlelib.tooltip import Hovertip
 import os
+import tkfontchooser
 from dataclasses import dataclass, field, asdict, fields
 from typing import Optional, List
 from pydantic import Field
@@ -122,12 +123,14 @@ class SettingsView:
         self.general_settings = ttk.Frame(self.notebook)
         self.create_general_settings_widgets()
 
-        # self.interface_settings = ttk.Frame(self.notebook)
+        self.interface_settings = ttk.Frame(self.notebook)
+        self.create_interface_settings_widgets()
+
         self.generation_settings = ttk.Frame(self.notebook)
         self.create_generation_settings_widgets()
 
         self.notebook.add(self.general_settings, text="General")
-        # self.notebook.add(self.interface_settings, text="Interface")
+        self.notebook.add(self.interface_settings, text="Interface")
         self.notebook.add(self.generation_settings, text="Generation")
         self.notebook.pack()
 
@@ -154,9 +157,9 @@ class SettingsView:
             self.view_config.generation_settings
             == self.current_readonly_config.generation_settings
         ):
-            self.notebook.tab(1, text="Generation")
+            self.notebook.tab(2, text="Generation")
         else:
-            self.notebook.tab(1, text="Generation*")
+            self.notebook.tab(2, text="Generation*")
 
         if self.view_config == self.current_readonly_config:
             self.apply_button.state(["disabled"])
@@ -170,6 +173,40 @@ class SettingsView:
         key_label = tk.Label(self.general_settings, text="textgen-webui address")
         key_label.grid(row=0, column=0)
         self.server_address.grid(row=0, column=1)
+
+    def create_interface_settings_widgets(self):
+        key_label = tk.Label(self.interface_settings, text="Font")
+
+        font_name, font_size = (
+            self.view_config.ui_settings.font_name,
+            self.view_config.ui_settings.font_size,
+        )
+        self.font_button = tk.Button(
+            self.interface_settings,
+            text=f"{font_name} {font_size}",
+            font=(font_name, font_size),
+            command=self.on_wanted_font_change,
+        )
+
+        key_label.grid(row=0, column=0)
+        self.font_button.grid(row=0, column=1)
+
+    def on_wanted_font_change(self):
+
+        font_name, font_size = (
+            self.view_config.ui_settings.font_name,
+            self.view_config.ui_settings.font_size,
+        )
+
+        font = tkfontchooser.askfont(self.toplevel, family=font_name, size=font_size)
+        if font:
+            font_name, font_size = font["family"], font["size"]
+            self.font_button.configure(
+                text=f"{font_name} {font_size}",
+                font=(font_name, font_size),
+            )
+            self.view_config.ui_settings.font_name = font_name
+            self.view_config.ui_settings.font_size = font_size
 
     def on_written_generation_field(self, field_name: str, *, type):
         def handler():
