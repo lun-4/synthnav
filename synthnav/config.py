@@ -1,3 +1,4 @@
+import logging
 from copy import deepcopy
 import tkinter as tk
 from tkinter import ttk
@@ -8,6 +9,9 @@ from dataclasses import dataclass, field, asdict, fields
 from typing import Optional, List
 from pydantic import Field
 from pydantic.dataclasses import dataclass as pyd_dataclass
+from .util.widgets import CustomText
+
+log = logging.getLogger(__name__)
 
 
 @pyd_dataclass
@@ -153,6 +157,23 @@ class SettingsView:
         print("TODO")
 
     def on_config_change(self):
+
+        if (
+            self.view_config.server_address
+            == self.current_readonly_config.server_address
+        ):
+            self.notebook.tab(0, text="General")
+        else:
+            self.notebook.tab(0, text="General*")
+
+        print("v", self.view_config.ui_settings)
+        print("c", self.current_readonly_config.ui_settings)
+
+        if self.view_config.ui_settings == self.current_readonly_config.ui_settings:
+            self.notebook.tab(1, text="Interface")
+        else:
+            self.notebook.tab(1, text="Interface*")
+
         if (
             self.view_config.generation_settings
             == self.current_readonly_config.generation_settings
@@ -166,8 +187,19 @@ class SettingsView:
         else:
             self.apply_button.state(["!disabled"])
 
+    def on_edited_general_settings_server_address(self, _event):
+        new_server_address = self.server_address.get("1.0", "end").strip()
+        log.debug("new addr: %r", new_server_address)
+        self.view_config.server_address = new_server_address
+        self.on_config_change()
+
     def create_general_settings_widgets(self):
-        self.server_address = tk.Text(self.general_settings, height=1, width=50)
+        self.server_address = CustomText(
+            self.general_settings,
+            height=1,
+            width=50,
+            command=self.on_edited_general_settings_server_address,
+        )
         self.server_address.insert(tk.END, self.current_readonly_config.server_address)
 
         key_label = tk.Label(self.general_settings, text="textgen-webui address")
@@ -201,12 +233,13 @@ class SettingsView:
         font = tkfontchooser.askfont(self.toplevel, family=font_name, size=font_size)
         if font:
             font_name, font_size = font["family"], font["size"]
+            self.view_config.ui_settings.font_name = font_name
+            self.view_config.ui_settings.font_size = font_size
             self.font_button.configure(
                 text=f"{font_name} {font_size}",
                 font=(font_name, font_size),
             )
-            self.view_config.ui_settings.font_name = font_name
-            self.view_config.ui_settings.font_size = font_size
+            self.on_config_change()
 
     def on_written_generation_field(self, field_name: str, *, type):
         def handler():
