@@ -15,6 +15,7 @@ from idlelib.tooltip import Hovertip
 from .experiment_asyncio import TkAsyncApplication
 from .config import GenerationSettings, SettingsView
 from .generate import generate_text
+from .util.widgets import CustomText
 
 log = logging.getLogger(__name__)
 
@@ -201,10 +202,9 @@ class SingleGenerationView(tk.Frame):
         if destroy:
             self.text_widget.destroy()
 
-        self.text_widget = tk.Text(self, width=40, height=5)
+        self.text_widget = CustomText(self, width=40, height=5, auto_select=True)
         self.text_widget.insert(tk.INSERT, self.generation.text)
         self.text_widget.grid(row=0, column=0)
-        self.text_widget.bind("<Control-Key-a>", self.select_all_text_widget)
 
         log.debug(
             "generation id %r, state %r", self.generation.id, self.generation.state
@@ -218,12 +218,6 @@ class SingleGenerationView(tk.Frame):
 
         if focus:
             self.text_widget.focus_set()
-
-    def select_all_text_widget(self, _event):
-        self.text_widget.tag_add(tk.SEL, "1.0", tk.END)
-        self.text_widget.mark_set(tk.INSERT, "1.0")
-        self.text_widget.see(tk.INSERT)
-        return "break"
 
     def on_wanted_edit(self):
         match self.generation.state:
