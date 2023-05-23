@@ -8,6 +8,8 @@ import contextlib
 import functools
 import lorem
 import tkinter as tk
+from pathlib import Path
+from tkinter import filedialog
 from typing import List, Tuple, Optional
 from tkinter import ttk
 from uuid import UUID, uuid4 as new_uuid
@@ -445,6 +447,7 @@ class GenerationTreeController:
         self.window = window
         self.root_generation = root_generation
         self.tree_view = tree_view
+        self.database_path = None
         self.generation_map = {root_generation.id: root_generation}
 
     def prompt_from(self, node_id: str) -> None:
@@ -503,6 +506,18 @@ class GenerationTreeController:
         print("serialized form:")
         print(data)
 
+    def new_file(self, filepath: Path):
+        log.info("want new file at %r", filepath)
+        assert not filepath.exists()
+        with filepath.open(mode="w"):
+            pass
+        self.database_path = filepath
+
+    def open_file(self, filepath: Path):
+        log.info("want open file at %r", filepath)
+        assert filepath.exists()
+        self.database_path = filepath
+
 
 class RealUIWindow(tk.Tk):
     def __init__(self, app, ctx):
@@ -518,7 +533,13 @@ class RealUIWindow(tk.Tk):
         menu = tk.Menu(self)
         self["menu"] = menu
 
-        menu.add_command(label="Settings", command=self.view_settings)
+        menu_file = tk.Menu(menu)
+        menu_file.add_command(label="New", command=self.on_wanted_new)
+        menu_file.add_command(label="Open...", command=self.on_wanted_open)
+        menu_file.add_command(label="Close", command=self.on_wanted_close)
+
+        menu.add_cascade(menu=menu_file, label="File")
+        menu.add_command(label="Settings", command=self.on_wanted_view_settings)
 
         root_generation = Generation(
             id=new_uuid(),
@@ -552,7 +573,42 @@ class RealUIWindow(tk.Tk):
         self.error_text.grid(row=2, column=0)
         self.error_text.configure(fg="red")
 
-    def view_settings(self):
+    def on_wanted_new(self):
+        wanted_filename = filedialog.asksaveasfilename(
+            defaultextension=".synthnav",
+            filetypes=(("synthnav story file", "*.synthnav"),),
+        )
+
+        if wanted_filename is None:
+            return
+
+        filepath = Path(wanted_filename)
+        if not filepath.name:
+            return
+
+        self.tree_controller.new_file(filepath)
+
+    def on_wanted_open(self):
+
+        wanted_fd = filedialog.askopenfile(
+            defaultextension=".synthnav",
+            filetypes=(("synthnav story file", "*.synthnav"),),
+        )
+
+        if wanted_fd is None:
+            return
+
+        # we'll reopen this using the Database class so
+        # close it here already
+
+        with wanted_fd:
+            filepath = Path(wanted_fd.name)
+            self.tree_controller.open_file(filepath)
+
+    def on_wanted_close(self):
+        self.destroy()
+
+    def on_wanted_view_settings(self):
         self.settings_view = SettingsView(self.ctx.config)
         self.settings_view.create_widgets(self)
 
