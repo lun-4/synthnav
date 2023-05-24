@@ -1,4 +1,5 @@
 import sys
+import time
 import queue
 import logging
 import tkinter as tk
@@ -58,6 +59,23 @@ class TkAsyncApplication:
         self.thread_unsafe_loop.run_forever()
         log.info("asyncio stopped")
 
+    def tick_tk_every_second(self):
+        """This thread makes tk check itself every 200ms.
+
+        It is a hack to make CTRL-Cs work when the window is unfocused.
+
+        The NOTHING TkEvent exists only for that purpose.
+        """
+        while True:
+            if self._shutdown:
+                break
+
+            if self.thread_unsafe_tk:
+                self.tk_emit(TkEvent.NOTHING)
+                time.sleep(0.2)
+            else:
+                time.sleep(1)
+
     def _start(self, ctx):
 
         # can't run tk in separate thread, from
@@ -72,6 +90,7 @@ class TkAsyncApplication:
 
         threads = [
             threading.Thread(target=self.__class__.start_asyncio, args=[self, ctx]),
+            threading.Thread(target=self.__class__.tick_tk_every_second, args=[self]),
         ]
         try:
             for thread in threads:
@@ -83,8 +102,8 @@ class TkAsyncApplication:
         except:
             log.exception("failed")
         finally:
+            self._shutdown = True
             self.thread_unsafe_loop.call_soon_threadsafe(self.thread_unsafe_loop.stop)
-            sys.exit(1)
 
     def start(self, ctx):
         try:
@@ -131,9 +150,11 @@ class AsyncExperiment:
         self.loop = asyncio.get_event_loop()
         self.queue = queue.Queue()
         threads = [
-            threading.Thread(target=AsyncExperiment.start_tk, args=[self, ctx, loop]),
             threading.Thread(
-                target=AsyncExperiment.start_asyncio, args=[self, ctx, loop]
+                target=AsyncExperiment.start_tk, args=[self, ctx, self.loop]
+            ),
+            threading.Thread(
+                target=AsyncExperiment.start_asyncio, args=[self, ctx, self.loop]
             ),
         ]
         try:
@@ -143,7 +164,7 @@ class AsyncExperiment:
                 thread.join()
         except KeyboardInterrupt:
             log.info("shutdown")
-            loop.call_soon_threadsafe(loop.stop)
+            self.loop.call_soon_threadsafe(loop.stop)
             self.root.event_generate("<<Quit>>")
         finally:
             sys.exit(1)
