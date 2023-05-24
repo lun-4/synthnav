@@ -7,6 +7,7 @@ import asyncio
 import threading
 from typing import Any
 from enum import Enum
+from .tinytask import TinytaskManager
 
 log = logging.getLogger(__name__)
 
@@ -14,26 +15,42 @@ log = logging.getLogger(__name__)
 class TkEvent(Enum):
     QUIT = "<<Quit>>"
     NEW_MESSAGE = "<<NewMessage>>"
+    NOTHING = "<<Nothing>>"
 
 
 class TkAsyncApplication:
     def __init__(self):
-        self.queue_for_tk = queue.Queue()
+
+        self.task = TinytaskManager(
+            asyncio.get_event_loop(), self.on_new_message_for_tk
+        )
         self.thread_unsafe_loop = asyncio.get_event_loop()
         self.thread_unsafe_tk = None
         self._is_tk_setup = False
-
-    def await_run(self, coroutine):
-        log.debug("run coro %r", coroutine)
-        asyncio.run_coroutine_threadsafe(coroutine, self.thread_unsafe_loop)
+        self._shutdown = False
 
     def tk_emit(self, tk_event: TkEvent):
-        log.debug("tk emit %s", tk_event)
+        if tk_event != TkEvent.NOTHING:
+            log.debug("tk emit %s", tk_event)
         self.thread_unsafe_tk.event_generate(tk_event.value, when="tail")
 
-    def tk_send(self, data: Any):
-        self.queue_for_tk.put(data)
+    def on_new_message_for_tk(self):
         self.tk_emit(TkEvent.NEW_MESSAGE)
+
+    def process_tk_message(self, *args, **kwargs):
+        # consume all messages and call relevant callbacks
+        # in the main thread
+        while True:
+            try:
+                call_info = self.task.sync_queue.get_nowait()
+            except queue.Empty:
+                break
+            try:
+                log.debug("message: %r", call_info)
+                func, args = call_info
+                func(*args)
+            except Exception:
+                log.exception("failed to process message %r", call_info)
 
     def tk_bind(self, tk_event: TkEvent, *args, **kwargs):
         # TODO maybe use contextvars to assert tk_bind() is called from
@@ -50,7 +67,7 @@ class TkAsyncApplication:
     def start_tk(self, ctx):
         self.thread_unsafe_tk = self.setup_tk(ctx)
         self.tk_bind(TkEvent.QUIT, lambda _: self.thread_unsafe_tk.destroy())
-        self.tk_bind(TkEvent.NEW_MESSAGE, self.handle_tk_message)
+        self.tk_bind(TkEvent.NEW_MESSAGE, self.process_tk_message)
         self._is_tk_setup = True
         self.thread_unsafe_tk.mainloop()
         log.info("tk stopped")

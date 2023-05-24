@@ -16,7 +16,7 @@ from uuid import UUID, uuid4 as new_uuid
 from idlelib.tooltip import Hovertip
 from .experiment_asyncio import TkAsyncApplication
 from .config import GenerationSettings, SettingsView
-from .generate import generate_text
+from .generate import text_generator_process
 from .util.widgets import CustomText
 
 log = logging.getLogger(__name__)
@@ -478,16 +478,30 @@ class GenerationTreeController:
         if not text:
             prompt = self.prompt_from(parent_node_id)
             log.debug("creating child with prompt %r", prompt)
-            self.app.await_run(
-                self.app.spawn_generator(
-                    self.window.ctx.config.generation_settings, new_child.id, prompt
-                )
+
+            # as the child needs some text in it, spawn a task
+            # in the background that generates it
+            self.app.task.spawn_once(
+                text_generator_process,
+                self.on_text_generation_reply,
+                args=[self.window.ctx.config.generation_settings, prompt],
+                as_pid=new_child.id,
             )
+
         else:
             new_child.state = GenerationState.GENERATED
         return new_child
 
-    def incoming_token(self, generation_id, data: str):
+    def on_text_generation_reply(self, generation_id, data: Tuple[str, str]):
+        match data[0]:
+            case "new_incoming_token":
+                self.incoming_data(generation_id, data[1])
+            case "finished_tokens":
+                self.finished_tokens(generation_id)
+            case _:
+                raise AssertionError("invalid generation event %r", data[0])
+
+    def incoming_data(self, generation_id, data: str):
         self.generation_map[generation_id].text = (
             self.generation_map[generation_id].text + data
         )

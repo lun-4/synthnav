@@ -56,3 +56,10 @@ async def generate_text(
                         return
 
     log.debug("reached end of stream, returning")
+
+
+async def text_generator_process(tt, settings, prompt, from_pid):
+    async for data in generate_text(prompt, settings=settings):
+        tt.send(from_pid, ("new_incoming_token", data))
+    tt.send(from_pid, ("finished_tokens", None))
+    tt.finish(from_pid)
