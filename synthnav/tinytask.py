@@ -1,7 +1,10 @@
 import inspect
 import asyncio
 import logging
+import threading
 import queue
+from typing import Any
+from dataclasses import dataclass
 from uuid import UUID, uuid4
 
 log = logging.getLogger(__name__)
@@ -13,6 +16,12 @@ class ConnectionID(UUID):
 
 class ProcessID(UUID):
     pass
+
+
+@dataclass
+class Callback:
+    originating_thread_name: str
+    function: Any
 
 
 async def spawner(tt, function, args, kwargs, reply_to):
@@ -48,7 +57,7 @@ class TinytaskManager:
 
         as_pid = as_pid or uuid4()
         if callback:
-            self.callbacks[as_pid] = callback
+            self.callbacks[as_pid] = Callback(threading.current_thread().name, callback)
         asyncio.run_coroutine_threadsafe(
             spawner(self, function, args, kwargs, as_pid), self.loop
         )
@@ -59,13 +68,25 @@ class TinytaskManager:
         if not callback:
             log.warning("unknown pid %r", process_id)
             return
-        if inspect.iscoroutinefunction(callback):
+
+        current_thread_name = threading.current_thread().name
+
+        if (
+            current_thread_name == "asyncio"
+            and callback.originating_thread_name == "asyncio"
+        ):
+            # async-to-async, just await the callback
+            asyncio.run(callback.function(process_id, data))
+            return
+
+        if callback.originating_thread_name == "asyncio":
+            # callback is from asyncio, schedule it to the loop
             asyncio.run_coroutine_threadsafe(
-                spawn_task(callback, process_id, data), self.loop
+                spawn_task(callback.function, process_id, data), self.loop
             )
         else:
-            # push to tk
-            self.sync_queue.put((callback, [process_id, data]))
+            # callback is from tk thread, push to it
+            self.sync_queue.put((callback.function, [process_id, data]))
             self.sync_message_notifier()
 
     def finish(self, id: UUID):

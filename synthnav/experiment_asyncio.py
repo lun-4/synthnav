@@ -106,8 +106,14 @@ class TkAsyncApplication:
         # thread via a polling technique when processing calls from other threads.
 
         threads = [
-            threading.Thread(target=self.__class__.start_asyncio, args=[self, ctx]),
-            threading.Thread(target=self.__class__.tick_tk_every_second, args=[self]),
+            threading.Thread(
+                target=self.__class__.start_asyncio, args=[self, ctx], name="asyncio"
+            ),
+            threading.Thread(
+                target=self.__class__.tick_tk_every_second,
+                args=[self],
+                name="tk_ticker",
+            ),
         ]
         try:
             for thread in threads:
