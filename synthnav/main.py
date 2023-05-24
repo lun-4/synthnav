@@ -72,10 +72,9 @@ def main():
     logging.basicConfig(
         level=logging.DEBUG if os.environ.get("DEBUG") else logging.INFO
     )
-    logging.getLogger("websockets.client").setLevel(logging.INFO)
+    # logging.getLogger("websockets.client").setLevel(logging.INFO)
     log.info("boot")
     ctx = Context(Config.from_environ())
-    # asyncio.run(App().run_forever(ctx))
     UIMockup().start(ctx)
     # AsyncExperiment().start(ctx)
     log.info("shutdown")

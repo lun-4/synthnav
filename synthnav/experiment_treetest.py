@@ -19,6 +19,7 @@ from .config import GenerationSettings, SettingsView
 from .generate import text_generator_process
 from .util.widgets import CustomText
 from .context import app
+from .database import Database
 
 log = logging.getLogger(__name__)
 
@@ -69,6 +70,7 @@ def timerlog(log_title: str):
 class UIMockup(TkAsyncApplication):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, *kwargs)
+        self.db = Database()
 
     def setup_tk(self, ctx) -> tk.Tk:
         return RealUIWindow(ctx)
@@ -458,7 +460,7 @@ class GenerationTreeController:
 
             # as the child needs some text in it, spawn a task
             # in the background that generates it
-            app.task.spawn_once(
+            app.task.call(
                 text_generator_process,
                 self.on_text_generation_reply,
                 args=[self.window.ctx.config.generation_settings, prompt],
@@ -503,12 +505,12 @@ class GenerationTreeController:
         with filepath.open(mode="w"):
             pass
 
-        app.task.run(self.db.new(filepath))
+        app.task.cast(app.db.create_on(filepath))
 
     def open_file(self, filepath: Path):
         log.info("want open file at %r", filepath)
         assert filepath.exists()
-        app.task.run(self.db.open(filepath))
+        app.task.cast(app.db.open_on(filepath))
 
 
 class RealUIWindow(tk.Tk):

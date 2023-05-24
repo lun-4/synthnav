@@ -32,6 +32,13 @@ async def spawner(tt, function, args, kwargs, reply_to):
         log.exception("failed to call %r %r %r %r", function, args, kwargs, reply_to)
 
 
+async def coroutine_wrapper(coro):
+    try:
+        await coro
+    except:
+        log.exception("failed to call %r", coro)
+
+
 async def spawn_task(coro):
     asyncio.create_task(coro)
 
@@ -43,7 +50,12 @@ class TinytaskManager:
         self.sync_message_notifier = sync_message_notifier
         self.sync_queue = queue.Queue()
 
-    def spawn_once(
+    def cast(self, coro):
+        """Run a coroutine in the asyncio loop without waiting for reply."""
+        assert inspect.iscoroutine(coro)
+        asyncio.run_coroutine_threadsafe(coroutine_wrapper(coro), self.loop)
+
+    def call(
         self,
         function,
         callback=None,
