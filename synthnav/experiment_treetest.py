@@ -69,27 +69,6 @@ class UIMockup(TkAsyncApplication):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, *kwargs)
 
-    def handle_tk_message(self, *args, **kwargs):
-        message = self.queue_for_tk.get()
-        message_type = message[0]
-        message_args = message[1:]
-        match message[0]:
-            case "new_incoming_token":
-                self.thread_unsafe_tk.incoming_token(*message_args)
-            case "finished_tokens":
-                self.thread_unsafe_tk.finished_tokens(*message_args)
-        self.queue_for_tk.task_done()
-
-    async def _generate(
-        self, settings: GenerationSettings, new_generation_id: UUID, prompt: str
-    ):
-        async for token in generate_text(prompt, settings=settings):
-            self.tk_send(("new_incoming_token", new_generation_id, token))
-        self.tk_send(("finished_tokens", new_generation_id))
-
-    async def spawn_generator(self, settings, new_generation_id: UUID, prompt: str):
-        asyncio.create_task(self._generate(settings, new_generation_id, prompt))
-
     def setup_tk(self, ctx) -> tk.Tk:
         return RealUIWindow(self, ctx)
 

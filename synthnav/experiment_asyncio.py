@@ -49,6 +49,7 @@ class TkAsyncApplication:
                 log.debug("message: %r", call_info)
                 func, args = call_info
                 func(*args)
+                self.task.sync_queue.task_done()
             except Exception:
                 log.exception("failed to process message %r", call_info)
 
@@ -61,12 +62,12 @@ class TkAsyncApplication:
             raise RuntimeError("tk_bind called after tk setup")
         self.thread_unsafe_tk.bind(tk_event.value, *args, **kwargs)
 
-    def handle_tk_message(self, *args, **kwargs):
-        raise NotImplementedError()
+    def quit(self, *args, **kwargs):
+        self.thread_unsafe_tk.destroy()
 
     def start_tk(self, ctx):
         self.thread_unsafe_tk = self.setup_tk(ctx)
-        self.tk_bind(TkEvent.QUIT, lambda _: self.thread_unsafe_tk.destroy())
+        self.tk_bind(TkEvent.QUIT, self.quit)
         self.tk_bind(TkEvent.NEW_MESSAGE, self.process_tk_message)
         self._is_tk_setup = True
         self.thread_unsafe_tk.mainloop()
@@ -92,6 +93,7 @@ class TkAsyncApplication:
                 time.sleep(0.2)
             else:
                 time.sleep(1)
+        log.info("tk ticker stopped")
 
     def _start(self, ctx):
 

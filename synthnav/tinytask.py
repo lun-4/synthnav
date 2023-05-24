@@ -29,7 +29,7 @@ async def spawner(tt, function, args, kwargs, reply_to):
         coroutine = function(tt, *args, **kwargs, from_pid=reply_to)
         asyncio.create_task(coroutine)
     except:
-        log.exception("shit")
+        log.exception("failed to call %r %r %r %r", function, args, kwargs, reply_to)
 
 
 async def spawn_task(coro):
