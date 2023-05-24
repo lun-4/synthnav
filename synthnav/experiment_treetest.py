@@ -18,6 +18,7 @@ from .experiment_asyncio import TkAsyncApplication
 from .config import GenerationSettings, SettingsView
 from .generate import text_generator_process
 from .util.widgets import CustomText
+from .context import app
 
 log = logging.getLogger(__name__)
 
@@ -70,7 +71,7 @@ class UIMockup(TkAsyncApplication):
         super().__init__(*args, *kwargs)
 
     def setup_tk(self, ctx) -> tk.Tk:
-        return RealUIWindow(self, ctx)
+        return RealUIWindow(ctx)
 
 
 class GenerationState(enum.IntEnum):
@@ -130,7 +131,7 @@ class SingleGenerationView(tk.Frame):
         self.serialize_button = tk.Button(
             self.buttons, text=SERIALIZE_BUTTON_TEXT, command=self.on_wanted_serialize
         )
-        # TODO serialize_button tip
+        self.serialize_tip = Hovertip(self.serialize_button, "Serialize path into text")
 
         self.text_widget.grid(row=0, column=0)
         self.buttons.grid(row=0, column=1)
@@ -176,8 +177,6 @@ class SingleGenerationView(tk.Frame):
                 self.text_widget.config(bg="gray51", fg="white")
             case GenerationState.PENDING:
                 self.text_widget.config(bg="gray20", fg="white")
-            # case GenerationState.EDITING:
-            #    self.text_widget.config(bg="red", fg="white")
 
     def to_editable(self, *, destroy: bool = False, focus: bool = False):
         if destroy:
@@ -420,9 +419,8 @@ class GenerationTreeView:
 
 class GenerationTreeController:
     def __init__(
-        self, app, window, root_generation: Generation, tree_view: GenerationTreeView
+        self, window, root_generation: Generation, tree_view: GenerationTreeView
     ):
-        self.app = app
         self.window = window
         self.root_generation = root_generation
         self.tree_view = tree_view
@@ -460,7 +458,7 @@ class GenerationTreeController:
 
             # as the child needs some text in it, spawn a task
             # in the background that generates it
-            self.app.task.spawn_once(
+            app.task.spawn_once(
                 text_generator_process,
                 self.on_text_generation_reply,
                 args=[self.window.ctx.config.generation_settings, prompt],
@@ -504,20 +502,19 @@ class GenerationTreeController:
         assert not filepath.exists()
         with filepath.open(mode="w"):
             pass
-        self.database_path = filepath
+
+        app.task.run(self.db.new(filepath))
 
     def open_file(self, filepath: Path):
         log.info("want open file at %r", filepath)
         assert filepath.exists()
-        self.database_path = filepath
+        app.task.run(self.db.open(filepath))
 
 
 class RealUIWindow(tk.Tk):
-    def __init__(self, app, ctx):
+    def __init__(self, ctx):
         super().__init__()
-        self.app = app
         self.ctx = ctx
-        print(self.app)
         self.title("synthnav")
         self.geometry("800x600")
 
@@ -542,9 +539,7 @@ class RealUIWindow(tk.Tk):
         )
 
         self.tree = GenerationTreeView(self, root_generation)
-        self.tree_controller = GenerationTreeController(
-            self.app, self, root_generation, None
-        )
+        self.tree_controller = GenerationTreeController(self, root_generation, None)
         self.tree.controller = self.tree_controller
 
         if ctx.config.mock and ctx.config.mock_node_amount:

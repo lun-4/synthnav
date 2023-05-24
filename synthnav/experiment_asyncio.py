@@ -8,6 +8,7 @@ import threading
 from typing import Any
 from enum import Enum
 from .tinytask import TinytaskManager
+from .context import app_context_var
 
 log = logging.getLogger(__name__)
 
@@ -20,7 +21,6 @@ class TkEvent(Enum):
 
 class TkAsyncApplication:
     def __init__(self):
-
         self.task = TinytaskManager(
             asyncio.get_event_loop(), self.on_new_message_for_tk
         )
@@ -28,6 +28,7 @@ class TkAsyncApplication:
         self.thread_unsafe_tk = None
         self._is_tk_setup = False
         self._shutdown = False
+        app_context_var.set(self)
 
     def tk_emit(self, tk_event: TkEvent):
         if tk_event != TkEvent.NOTHING:
