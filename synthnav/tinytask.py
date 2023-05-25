@@ -10,6 +10,11 @@ from uuid import UUID, uuid4
 log = logging.getLogger(__name__)
 
 
+def producer(function):
+    function.__tt_is_producer = True
+    return function
+
+
 class ConnectionID(UUID):
     pass
 
@@ -24,10 +29,27 @@ class Callback:
     function: Any
 
 
+async def reply_with_returnvalue(tt, reply_to, coro):
+    try:
+        tt.reply(reply_to, await coro)
+        tt.finish(reply_to)
+    except:
+        log.exception("failed to call %r %r", reply_to, coro)
+
+
 async def spawner(tt, function, args, kwargs, reply_to):
     try:
-        coroutine = function(tt, *args, **kwargs, from_pid=reply_to)
-        asyncio.create_task(coroutine)
+        try:
+            is_producer = getattr(function, "__tt_is_producer")
+        except AttributeError:
+            is_producer = False
+
+        if is_producer:
+            coroutine = function(tt, *args, **kwargs, from_pid=reply_to)
+            asyncio.create_task(coroutine)
+        else:
+            coroutine = function(*args, **kwargs)
+            asyncio.create_task(reply_with_returnvalue(tt, reply_to, coroutine))
     except:
         log.exception("failed to call %r %r %r %r", function, args, kwargs, reply_to)
 

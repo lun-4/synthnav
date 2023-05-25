@@ -9,6 +9,7 @@ import random
 import dataclasses
 from typing import Generator
 from .config import GenerationSettings
+from .tinytask import producer
 
 log = logging.getLogger(__name__)
 
@@ -58,6 +59,7 @@ async def generate_text(
     log.debug("reached end of stream, returning")
 
 
+@producer
 async def text_generator_process(tt, settings, prompt, from_pid):
     async for data in generate_text(prompt, settings=settings):
         tt.send(from_pid, ("new_incoming_token", data))
