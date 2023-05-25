@@ -529,6 +529,7 @@ class RealUIWindow(tk.Tk):
         menu_file = tk.Menu(menu)
         menu_file.add_command(label="New", command=self.on_wanted_new)
         menu_file.add_command(label="Open...", command=self.on_wanted_open)
+        menu_file.add_command(label="Save", command=self.on_wanted_save)
         menu_file.add_command(label="Close", command=self.on_wanted_close)
 
         menu.add_cascade(menu=menu_file, label="File")
@@ -595,6 +596,26 @@ class RealUIWindow(tk.Tk):
         with wanted_fd:
             filepath = Path(wanted_fd.name)
             self.tree_controller.open_file(filepath)
+
+    def on_wanted_save(self):
+
+        if not app.db.path:
+
+            wanted_filename = filedialog.asksaveasfilename(
+                defaultextension=".synthnav",
+                filetypes=(("synthnav story file", "*.synthnav"),),
+            )
+
+            if wanted_filename is None:
+                return
+
+            filepath = Path(wanted_filename)
+            if not filepath.name:
+                return
+
+            app.task.cast(app.db.open_on(filepath, new=True, wipe_memory=False))
+        else:
+            app.task.cast(app.db.save())
 
     def on_wanted_close(self):
         self.destroy()
