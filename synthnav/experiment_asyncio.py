@@ -74,9 +74,26 @@ class TkAsyncApplication:
         self.thread_unsafe_tk.mainloop()
         log.info("tk stopped")
 
+    def _handle_asyncio_exception(self, _loop, context):
+        log.exception("async error")
+
     def start_asyncio(self, ctx):
+        self.thread_unsafe_loop.set_exception_handler(self._handle_asyncio_exception)
+        log.info("asyncio run_forever")
         self.thread_unsafe_loop.run_forever()
         log.info("asyncio stopped")
+
+    async def _shutdown_asyncio(self):
+        log.info("shutting down asyncio...")
+        loop = self.thread_unsafe_loop
+
+        tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+        log.debug("%d tasks", len(tasks))
+        [task.cancel() for task in tasks]
+
+        log.info("Cancelling %d outstanding tasks...", len(tasks))
+        await asyncio.gather(*tasks, return_exceptions=True)
+        loop.stop()
 
     def tick_tk_every_second(self):
         """This thread makes tk check itself every 200ms.
@@ -124,12 +141,14 @@ class TkAsyncApplication:
 
             self.__class__.start_tk(self, ctx)
         except KeyboardInterrupt:
-            log.info("shutdown")
+            log.info("want shutdown")
         except:
             log.exception("failed")
         finally:
             self._shutdown = True
-            self.thread_unsafe_loop.call_soon_threadsafe(self.thread_unsafe_loop.stop)
+            asyncio.run_coroutine_threadsafe(
+                self._shutdown_asyncio(), self.thread_unsafe_loop
+            )
 
     def start(self, ctx):
         try:
