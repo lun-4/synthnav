@@ -72,7 +72,11 @@ class UIMockup(TkAsyncApplication):
         super().__init__(*args, *kwargs)
         self.db = Database()
 
+    def shutdown(self):
+        self.task.cast(self.db.close())
+
     def setup_tk(self, ctx) -> tk.Tk:
+        self.task.cast(self.db.init())
         return RealUIWindow(ctx)
 
 

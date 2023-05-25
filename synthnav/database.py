@@ -49,6 +49,7 @@ class Database:
         self.path = None
 
     async def init(self):
+        log.info("init db...")
         # the db system works by holding two "databases", one lives in
         # :memory:, and when asked to save, dumps all of itself into a
         # separate file
@@ -68,6 +69,7 @@ class Database:
             ) STRICT;
             """
         )
+        log.info("db initted!")
 
     async def close(self):
         if self.db:

@@ -1,4 +1,6 @@
 import sys
+import os
+import traceback
 import time
 import queue
 import logging
@@ -146,9 +148,25 @@ class TkAsyncApplication:
             log.exception("failed")
         finally:
             self._shutdown = True
+            shutdown_callback = getattr(self, "shutdown", None)
+            if shutdown_callback:
+                shutdown_callback()
             asyncio.run_coroutine_threadsafe(
                 self._shutdown_asyncio(), self.thread_unsafe_loop
             )
+
+        log.debug("running threads:")
+        frames = sys._current_frames()
+
+        for thread in threading.enumerate():
+            stack = frames.get(thread.ident)
+            if stack:
+                log.debug("%s", thread.name)
+
+                if os.environ.get("DEBUG"):
+                    log.debug("stack: %s", "".join(traceback.format_stack(stack)))
+            else:
+                log.debug("%s - No stack", thread.name)
 
     def start(self, ctx):
         try:
