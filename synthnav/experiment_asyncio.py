@@ -90,12 +90,20 @@ class TkAsyncApplication:
         loop = self.thread_unsafe_loop
 
         tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+
+        try:
+            async with asyncio.timeout(30):
+                await asyncio.gather(*tasks, return_exceptions=True)
+        except TimeoutError:
+            log.warning("took longer than 30 seconds to shutdown, forcing shutdown")
+
         log.debug("%d tasks", len(tasks))
         [task.cancel() for task in tasks]
 
         log.info("Cancelling %d outstanding tasks...", len(tasks))
         await asyncio.gather(*tasks, return_exceptions=True)
-        loop.stop()
+        loop.call_soon_threadsafe(loop.stop)
+        # loop.stop()
 
     def tick_tk_every_second(self):
         """This thread makes tk check itself every 200ms.
