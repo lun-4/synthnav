@@ -9,7 +9,7 @@ log = logging.getLogger(__name__)
 def must_be_initialized(function):
     def wrapped(self, *args, **kwargs):
         assert self.db is not None
-        return function(*args, **kwargs)
+        return function(self, *args, **kwargs)
 
     return wrapped
 
