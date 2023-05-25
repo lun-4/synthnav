@@ -76,7 +76,9 @@ class Database:
     @must_be_initialized
     async def run_migrations(self):
         log.info("running migrations on db...")
-        async with self.db.execute("select max(version) from migration_logs") as cursor:
+        async with self.db.execute(
+            "select max(version) as max from migration_log"
+        ) as cursor:
             row = await cursor.fetchone()
         current_version = row["max"] or 0
         log.info("db version: %d", current_version)
