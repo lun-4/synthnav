@@ -502,10 +502,7 @@ class GenerationTreeController:
     def new_file(self, filepath: Path):
         log.info("want new file at %r", filepath)
         assert not filepath.exists()
-        with filepath.open(mode="w"):
-            pass
-
-        app.task.cast(app.db.create_on(filepath))
+        app.task.cast(app.db.open_on(filepath))
 
     def open_file(self, filepath: Path):
         log.info("want open file at %r", filepath)
