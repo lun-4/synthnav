@@ -2,7 +2,10 @@ import time
 import logging
 import aiosqlite
 from pathlib import Path
+from .tinytask import producer
 from dataclasses import dataclass
+from uuid import UUID
+from .generation import GenerationState, Generation
 
 log = logging.getLogger(__name__)
 
@@ -13,6 +16,12 @@ def must_be_initialized(function):
         return function(self, *args, **kwargs)
 
     return wrapped
+
+
+def change(function):
+    """Signal that a function changes the database."""
+    function.__changes_db = True
+    return must_be_initialized(function)
 
 
 @dataclass
@@ -62,10 +71,13 @@ class Database:
         self.db.row_factory = aiosqlite.Row
 
         log.info("db initted!")
+        await self.run_migrations()
 
     async def close(self):
         if self.db:
+            log.info("closing db")
             await self.db.close()
+            log.info("db closed")
 
     @must_be_initialized
     async def run_migrations(self):
@@ -93,11 +105,10 @@ class Database:
                 log.info("migrating to version %d", migration.version)
 
                 await self.db.executescript(migration.sql)
-                async with self.db.execute_insert(
+                await self.db.execute_insert(
                     "insert into migration_log (version, applied_at, description) values (?,?,?)",
                     (migration.version, int(time.time()), migration.title),
-                ) as _:
-                    pass
+                )
 
     @must_be_initialized
     async def open_on(self, path: Path, *, new: bool = False, wipe_memory: bool = True):
@@ -130,3 +141,48 @@ class Database:
         log.info("saving to %r", self.path)
         async with aiosqlite.connect(self.path) as target_db:
             await self.db.backup(target_db)
+
+    @producer
+    @must_be_initialized
+    async def fetch_all_generations(self, tt, from_pid):
+        async with self.db.execute("select id, state, data from generations") as cursor:
+            async for row in cursor:
+                generation = Generation(
+                    id=UUID(row["id"]),
+                    state=GenerationState(row["state"]),
+                    text=row["data"],
+                    parent=None,  # TODO use a join to find parent
+                )
+                tt.send(from_pid, ("generation", generation))
+
+        async with self.db.execute(
+            "select parent_id, child_id from generation_parents"
+        ) as cursor:
+            async for row in cursor:
+                tt.send(from_pid, ("parent", row["parent_id"], row["child_id"]))
+
+        tt.send(from_pid, ("done",))
+        tt.finish(from_pid)
+
+    @change
+    async def update_generation(self, generation):
+        await self.db.execute_insert(
+            "update generations set state = ?, data = ? where id = ?",
+            (
+                generation.state,
+                generation.text,
+                str(generation.id),
+            ),
+        )
+
+    @change
+    async def insert_generation(self, generation):
+        await self.db.execute_insert(
+            "insert into generations (id,state,data) values (?,?,?)",
+            (str(generation.id), generation.state.value, generation.text),
+        )
+        if generation.parent:
+            await self.db.execute_insert(
+                "insert into generation_parents (parent_id,child_id) values (?,?)",
+                (str(generation.parent), str(generation.id)),
+            )

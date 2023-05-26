@@ -31,7 +31,7 @@ class Callback:
 
 async def reply_with_returnvalue(tt, reply_to, coro):
     try:
-        tt.reply(reply_to, await coro)
+        tt.send(reply_to, await coro)
         tt.finish(reply_to)
     except:
         log.exception("failed to call %r %r", reply_to, coro)

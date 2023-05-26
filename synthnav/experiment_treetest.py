@@ -20,6 +20,7 @@ from .generate import text_generator_process
 from .util.widgets import CustomText
 from .context import app
 from .database import Database
+from .generation import GenerationState, Generation
 
 log = logging.getLogger(__name__)
 
@@ -78,30 +79,6 @@ class UIMockup(TkAsyncApplication):
     def setup_tk(self, ctx) -> tk.Tk:
         self.task.cast(self.db.init())
         return RealUIWindow(ctx)
-
-
-class GenerationState(enum.IntEnum):
-    PENDING = 0
-    GENERATED = 1
-    EDITING = 2
-
-
-# Generation Model class
-class Generation:
-    def __init__(
-        self,
-        *,
-        id: UUID,
-        state: GenerationState,
-        text: str,
-        parent: UUID,
-        children: List[UUID] = None,
-    ):
-        self.id = id
-        self.state = state
-        self.text = text
-        self.parent = parent
-        self.children = children or []
 
 
 ADD_BUTTON_TEXT = "\N{HEAVY PLUS SIGN}"
@@ -446,7 +423,11 @@ class GenerationTreeController:
         return "".join(reversed(lines))
 
     def add_child(
-        self, parent_node_id: str, text: Optional[str] = None
+        self,
+        parent_node_id: str,
+        text: Optional[str] = None,
+        *,
+        view_only: bool = False,
     ) -> "Generation":
         new_child = Generation(
             id=new_uuid(),
@@ -473,6 +454,10 @@ class GenerationTreeController:
 
         else:
             new_child.state = GenerationState.GENERATED
+
+        if not view_only:
+            app.task.cast(app.db.insert_generation(new_child))
+
         return new_child
 
     def on_text_generation_reply(self, generation_id, data: Tuple[str, str]):
@@ -491,8 +476,10 @@ class GenerationTreeController:
         self.tree_view.on_incoming_token(generation_id, data)
 
     def finished_tokens(self, generation_id: UUID):
-        self.generation_map[generation_id].state = GenerationState.GENERATED
-        self.tree_view.single_generation_views[generation_id].on_state_change()
+        generation = self.generation_map[generation_id]
+        generation.state = GenerationState.GENERATED
+        self.tree_view.single_generation_views[generation.id].on_state_change()
+        app.task.cast(app.db.update_generation(generation))
 
     def start(self):
         self.tree_view.create_widgets()
@@ -535,35 +522,114 @@ class RealUIWindow(tk.Tk):
         menu.add_cascade(menu=menu_file, label="File")
         menu.add_command(label="Settings", command=self.on_wanted_view_settings)
 
-        root_generation = Generation(
-            id=new_uuid(),
-            state=GenerationState.EDITING,
-            text=lorem.paragraph(),
-            parent=None,
-        )
-
-        self.tree = GenerationTreeView(self, root_generation)
-        self.tree_controller = GenerationTreeController(self, root_generation, None)
-        self.tree.controller = self.tree_controller
-
-        if ctx.config.mock and ctx.config.mock_node_amount:
-            wanted_amount = int(ctx.config.mock_node_amount)
-            generations = [root_generation]
-            for _ in range(wanted_amount):
-                generation = random.choice(generations)
-                generations.append(
-                    self.tree_controller.add_child(generation.id, lorem.paragraph())
-                )
-
-        self.tree_controller.tree_view = self.tree
-        self.tree_controller.start()
-
         self.error_text_variable = tk.StringVar()
         self.error_text_variable.set("")
 
         self.error_text = tk.Label(self, textvariable=self.error_text_variable)
         self.error_text.grid(row=2, column=0)
         self.error_text.configure(fg="red")
+
+        self.root_generation = Generation(
+            id=new_uuid(),
+            state=GenerationState.EDITING,
+            text=lorem.paragraph(),
+            parent=None,
+        )
+        app.task.cast(app.db.insert_generation(self.root_generation))
+
+        self._generations = {}
+
+        if ctx.config.mock and ctx.config.mock_node_amount:
+            self._insert_mocked_data()
+        else:
+
+            # ask db to load generations, we can only start drawing once we
+            # have the entire DAG loaded
+            app.task.call(
+                app.db.fetch_all_generations, reply=self.on_database_loading_event
+            )
+
+    def _on_inserted_mock_generation(self, generation):
+        self._mocked_generations.append(generation)
+
+    def _insert_mocked_data(self):
+        self._mocked_generations = [self.root_generation]
+        self._mocked_wanted_amount = int(self.ctx.config.mock_node_amount)
+        for _ in range(self._mocked_wanted_amount):
+            random_parent = random.choice(self._mocked_generations)
+            child = Generation(
+                id=new_uuid(),
+                state=GenerationState.EDITING,
+                text=lorem.paragraph(),
+                parent=random_parent.id,
+            )
+            app.task.call(
+                app.db.insert_generation,
+                args=[child],
+                callback=lambda _a, _b: self._on_inserted_mock_generation(child),
+            )
+
+        assert len(app.task.callbacks) >= self._mocked_wanted_amount
+
+        # we don't provide an `app.task` facility for waiting on message
+        # replies because this is the only time i think we actually need this,
+        # on the mock generator function.
+        #
+        # if its needed somewhere else, remove this comment
+        while True:
+            # wait until all dbs have completed their tasks
+            if len(self._mocked_generations) >= self._mocked_wanted_amount:
+                break
+            time.sleep(0.1)
+
+        # everyone is loaded by now, fetch and do it
+        app.task.call(
+            app.db.fetch_all_generations, callback=self.on_database_loading_event
+        )
+
+    def on_database_loading_event(self, _reply_id, data):
+        match data[0]:
+            case "generation":
+                generation = data[1]
+                self._generations[generation.id] = generation
+            case "parent":
+                parent_id, child_id = UUID(data[1]), UUID(data[2])
+                self._generations[parent_id].children.append(
+                    self._generations[child_id].id
+                )
+                self._generations[child_id].parent = parent_id
+            case "done":
+                # find out who is the root generation
+                possible_root_generations = [
+                    g for g in self._generations.values() if not g.parent
+                ]
+
+                if len(possible_root_generations) != 1:
+                    raise AssertionError(
+                        f"expected 1 root generation, got {len(possible_root_generations)}"
+                    )
+                self.root_generation = possible_root_generations[0]
+
+                # time to load UI!
+                self.on_all_loaded_generations()
+            case _:
+                raise AssertionError(f"unexpected message type {data[0]}")
+
+    def on_all_loaded_generations(self):
+        log.info("all generations are loaded, drawing UI")
+        self.tree = GenerationTreeView(self, self.root_generation)
+        self.tree_controller = GenerationTreeController(
+            self, self.root_generation, None
+        )
+        self.tree.controller = self.tree_controller
+        self.tree_controller.tree_view = self.tree
+
+        # take all generations we got and load them in the controller
+        # so the view can use them
+        for generation in self._generations.values():
+            self.tree_controller.generation_map[generation.id] = generation
+
+        self.tree_controller.start()
 
     def on_wanted_new(self):
         wanted_filename = filedialog.asksaveasfilename(

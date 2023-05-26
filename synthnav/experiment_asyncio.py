@@ -35,7 +35,12 @@ class TkAsyncApplication:
     def tk_emit(self, tk_event: TkEvent):
         if tk_event != TkEvent.NOTHING:
             log.debug("tk emit %s", tk_event)
-        self.thread_unsafe_tk.event_generate(tk_event.value, when="tail")
+        if self.thread_unsafe_tk:
+            self.thread_unsafe_tk.event_generate(tk_event.value, when="tail")
+        else:
+            # if calling into the async thread as part of UI startup,
+            # simply process stuff directly. whats a lock
+            self.process_tk_message()
 
     def on_new_message_for_tk(self):
         self.tk_emit(TkEvent.NEW_MESSAGE)
@@ -77,7 +82,7 @@ class TkAsyncApplication:
         log.info("tk stopped")
 
     def _handle_asyncio_exception(self, _loop, context):
-        log.exception("async error")
+        log.exception("async error: %r", context)
 
     def start_asyncio(self, ctx):
         self.thread_unsafe_loop.set_exception_handler(self._handle_asyncio_exception)
