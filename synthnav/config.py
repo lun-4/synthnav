@@ -157,7 +157,6 @@ class SettingsView:
         print("TODO")
 
     def on_config_change(self):
-
         if (
             self.view_config.server_address
             == self.current_readonly_config.server_address
@@ -224,7 +223,6 @@ class SettingsView:
         self.font_button.grid(row=0, column=1)
 
     def on_wanted_font_change(self):
-
         font_name, font_size = (
             self.view_config.ui_settings.font_name,
             self.view_config.ui_settings.font_size,

@@ -542,7 +542,6 @@ class RealUIWindow(tk.Tk):
         if ctx.config.mock and ctx.config.mock_node_amount:
             self._insert_mocked_data()
         else:
-
             # ask db to load generations, we can only start drawing once we
             # have the entire DAG loaded
             app.task.call(
@@ -647,7 +646,6 @@ class RealUIWindow(tk.Tk):
         self.tree_controller.new_file(filepath)
 
     def on_wanted_open(self):
-
         wanted_fd = filedialog.askopenfile(
             defaultextension=".synthnav",
             filetypes=(("synthnav story file", "*.synthnav"),),
@@ -664,9 +662,7 @@ class RealUIWindow(tk.Tk):
             self.tree_controller.open_file(filepath)
 
     def on_wanted_save(self):
-
         if not app.db.path:
-
             wanted_filename = filedialog.asksaveasfilename(
                 defaultextension=".synthnav",
                 filetypes=(("synthnav story file", "*.synthnav"),),

@@ -129,7 +129,6 @@ class TkAsyncApplication:
         log.info("tk ticker stopped")
 
     def _start(self, ctx):
-
         # can't run tk in separate thread, from
         # https://stackoverflow.com/questions/14694408/runtimeerror-main-thread-is-not-in-main-loop
         #

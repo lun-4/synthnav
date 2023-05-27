@@ -38,7 +38,6 @@ async def generate_text(
     result = input_prompt
 
     async with GENERATION_LOCK:
-
         log.debug("connecting to %r", url)
         async with websockets.connect(url) as websocket:
             log.debug("connected to %r", url)
