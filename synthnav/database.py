@@ -119,9 +119,6 @@ class Database:
         self.path = path
         existed_before = path.exists()
 
-        if wipe_memory:
-            assert new
-
         async with aiosqlite.connect(self.path) as target_db:
             # either OPEN or NEW will lead to a reset of the entire state
             # SAVE won't
