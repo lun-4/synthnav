@@ -154,16 +154,24 @@ class Database:
     @producer
     @must_be_initialized
     async def fetch_all_generations(self, tt, from_pid):
-        async with self.db.execute("select id, state, data from generations") as cursor:
+        async with self.db.execute(
+            """
+            select id, state, data, parent_id
+            from generations
+            full outer join generation_parents
+            on generation_parents.child_id = generations.id
+            """
+        ) as cursor:
             async for row in cursor:
                 generation = Generation(
                     id=UUID(row["id"]),
                     state=GenerationState(row["state"]),
                     text=row["data"],
-                    parent=None,  # TODO use a join to find parent
+                    parent=UUID(row["parent_id"]) if row["parent_id"] else None,
                 )
                 tt.send(from_pid, ("generation", generation))
 
+        # TODO do we need this to be a part of the result, now that we use joins?
         async with self.db.execute(
             "select parent_id, child_id from generation_parents"
         ) as cursor:
