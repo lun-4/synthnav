@@ -54,7 +54,9 @@ class TkAsyncApplication:
             except queue.Empty:
                 break
             try:
-                log.debug("message: %r", call_info)
+                log.debug(
+                    "message: func=%r args=%r", call_info[0].__name__, call_info[1:]
+                )
                 func, args = call_info
                 func(*args)
                 self.task.sync_queue.task_done()
