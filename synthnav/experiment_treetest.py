@@ -545,6 +545,7 @@ class RealUIWindow(tk.Tk):
         )
         app.task.cast(app.db.insert_generation(self.root_generation))
 
+        self.tree = None
         self._generations = {}
 
         if ctx.config.mock and ctx.config.mock_node_amount:
@@ -623,6 +624,10 @@ class RealUIWindow(tk.Tk):
                 raise AssertionError(f"unexpected message type {data[0]}")
 
     def on_all_loaded_generations(self):
+        if self.tree:
+            self.tree.canvas.destroy()
+            self.tree = None
+
         log.info("all generations are loaded, drawing UI")
         self.tree = GenerationTreeView(self, self.root_generation)
         self.tree_controller = GenerationTreeController(
