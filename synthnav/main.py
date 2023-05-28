@@ -73,7 +73,8 @@ def main():
     logging.basicConfig(
         level=logging.DEBUG if os.environ.get("DEBUG") else logging.INFO
     )
-    # logging.getLogger("websockets.client").setLevel(logging.INFO)
+    logging.getLogger("websockets.client").setLevel(logging.INFO)
+    logging.getLogger("aiosqlite").setLevel(logging.INFO)
     log.info("boot")
     ctx = Context(Config.from_environ())
     UIMockup().start(ctx)

@@ -25,3 +25,6 @@ class Generation:
         self.text = text
         self.parent = parent
         self.children = children or []
+
+    def __repr__(self):
+        return f"Generation<{self.id!s}>"
