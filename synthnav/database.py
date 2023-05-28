@@ -60,7 +60,9 @@ class Database:
         self.path = None
 
     async def init(self):
-        log.info("init db...")
+        assert self.db is None  # do not call init() on already-initted db
+
+        log.info("initializing memory db...")
         # the db system works by holding two "databases", one lives in
         # :memory:, and when asked to save, dumps all of itself into a
         # separate file
@@ -70,17 +72,19 @@ class Database:
         self.db = await aiosqlite.connect(":memory:")
         self.db.row_factory = aiosqlite.Row
 
-        log.info("db initted!")
+        log.info("memory db running!")
         await self.run_migrations()
 
     async def close(self):
         if self.db:
             log.info("closing db")
             await self.db.close()
+            self.db = None
             log.info("db closed")
 
     @must_be_initialized
     async def run_migrations(self):
+        log.info("running migrations on db...")
         # all databases must have migration_log
         await self.db.execute(
             """
@@ -92,7 +96,6 @@ class Database:
             """
         )
 
-        log.info("running migrations on db...")
         async with self.db.execute(
             "select max(version) as max from migration_log"
         ) as cursor:
@@ -127,6 +130,9 @@ class Database:
                 await self.close()
                 await self.init()
 
+            await self.db.commit()
+            await target_db.commit()
+
             if not new:
                 # opening existing one, reset memory db
                 await target_db.backup(self.db)
@@ -134,13 +140,19 @@ class Database:
                 # save structure we already have on target db
                 await self.db.backup(target_db)
 
+            log.debug("running migrations...")
             await self.run_migrations()
+
+        log.info("done")
 
     @must_be_initialized
     async def save(self):
         log.info("saving to %r", self.path)
         async with aiosqlite.connect(self.path) as target_db:
+            await self.db.commit()
+            await target_db.commit()
             await self.db.backup(target_db)
+        log.info("done")
 
     @producer
     @must_be_initialized
