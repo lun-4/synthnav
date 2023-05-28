@@ -499,7 +499,14 @@ class GenerationTreeController:
     def open_file(self, filepath: Path):
         log.info("want open file at %r", filepath)
         assert filepath.exists()
-        app.task.cast(app.db.open_on(filepath))
+        app.task.call(app.db.open_on, args=(filepath,), callback=self._on_opened_db)
+
+    def _on_opened_db(self, *args):
+        self.window._generations = {}
+        self.window.root_generation = None
+        app.task.call(
+            app.db.fetch_all_generations, callback=self.window.on_database_loading_event
+        )
 
 
 class RealUIWindow(tk.Tk):
