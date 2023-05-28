@@ -138,6 +138,7 @@ class SingleGenerationView(tk.Frame):
                 textbox_text = textbox_text[:-1]
 
             self.generation.text = textbox_text
+            app.task.cast(app.db.update_generation(self.generation))
 
     def on_wanted_add(self):
         self.submit_text_to_generation()
